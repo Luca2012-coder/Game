@@ -3,12 +3,12 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import random
 
-WIDTH = 400
-HEIGHT = 600
-blokje_x = 100
+WIDTH = 300
+HEIGHT = 450
+blokje_x = 80
 
 def reset_pijp():
-    gat_y = random.randint(150, 450)
+    gat_y = random.randint(100, HEIGHT - 100)
     start_x = WIDTH
     return {'x': start_x, 'gat_y': gat_y}
 
@@ -18,7 +18,6 @@ def rects_collide(r1, r2):
                 r1[1] + r1[3] < r2[1] or r1[1] > r2[1] + r2[3])
 
 def flappy():
-    # Initialiseer sessiestate-variabelen als ze niet bestaan
     if 'blokje_y' not in st.session_state:
         st.session_state.blokje_y = HEIGHT // 2
     if 'zwaartekracht' not in st.session_state:
@@ -33,24 +32,21 @@ def flappy():
         st.session_state.game_over = False
 
     def teken_spel():
-        fig, ax = plt.subplots(figsize=(4,6))
+        fig, ax = plt.subplots(figsize=(3,4.5))
         ax.set_xlim(0, WIDTH)
         ax.set_ylim(0, HEIGHT)
         ax.axis('off')
 
-        # blokje tekenen
         blokje = patches.Rectangle((blokje_x-15, st.session_state.blokje_y-15), 30, 30, color='orange')
         ax.add_patch(blokje)
 
-        # pijpen tekenen
         for pijp in st.session_state.pijpen:
-            boven = patches.Rectangle((pijp['x'], 0), 50, pijp['gat_y'] - 75, color='green')
-            onder = patches.Rectangle((pijp['x'], pijp['gat_y'] + 75), 50, HEIGHT - pijp['gat_y'] - 75, color='green')
+            boven = patches.Rectangle((pijp['x'], 0), 40, pijp['gat_y'] - 60, color='green')
+            onder = patches.Rectangle((pijp['x'], pijp['gat_y'] + 60), 40, HEIGHT - pijp['gat_y'] - 60, color='green')
             ax.add_patch(boven)
             ax.add_patch(onder)
 
-        # score
-        ax.text(10, HEIGHT - 30, f"Score: {st.session_state.score}", fontsize=15, color='black')
+        ax.text(10, HEIGHT - 30, f"Score: {st.session_state.score}", fontsize=14, color='black')
 
         st.pyplot(fig)
 
@@ -59,29 +55,25 @@ def flappy():
             return
 
         if jump:
-            st.session_state.zwaartekracht = -8
+            st.session_state.zwaartekracht = -7
 
-        st.session_state.zwaartekracht += 0.5
+        st.session_state.zwaartekracht += 0.4
         st.session_state.blokje_y += st.session_state.zwaartekracht
 
-        # beweeg pijpen
         for pijp in st.session_state.pijpen:
             pijp['x'] -= 2
 
-        # voeg nieuwe pijp toe als laatste pijp voorbij de helft is
         if st.session_state.pijpen[-1]['x'] < WIDTH / 2:
             st.session_state.pijpen.append(reset_pijp())
 
-        # verwijder pijpen buiten beeld + score verhogen
-        if st.session_state.pijpen[0]['x'] < -50:
+        if st.session_state.pijpen[0]['x'] < -40:
             st.session_state.pijpen.pop(0)
             st.session_state.score += 1
 
-        # botsing checken
         blokje_rect = [blokje_x - 15, st.session_state.blokje_y - 15, 30, 30]
         for pijp in st.session_state.pijpen:
-            boven_rect = [pijp['x'], 0, 50, pijp['gat_y'] - 75]
-            onder_rect = [pijp['x'], pijp['gat_y'] + 75, 50, HEIGHT - pijp['gat_y'] - 75]
+            boven_rect = [pijp['x'], 0, 40, pijp['gat_y'] - 60]
+            onder_rect = [pijp['x'], pijp['gat_y'] + 60, 40, HEIGHT - pijp['gat_y'] - 60]
             if rects_collide(blokje_rect, boven_rect) or rects_collide(blokje_rect, onder_rect):
                 st.session_state.game_over = True
 
@@ -100,11 +92,14 @@ def flappy():
             st.session_state.started = False
             st.session_state.game_over = False
     else:
+        user_input = st.text_input("Typ 'v' en druk op Enter om te starten/springen", "")
+
         if not st.session_state.started:
-            if st.button("Start spel"):
+            if user_input.lower() == 'v':
                 st.session_state.started = True
+                update_game(jump=True)
         else:
-            if st.button("Spring!"):
+            if user_input.lower() == 'v':
                 update_game(jump=True)
             else:
                 update_game(jump=False)
