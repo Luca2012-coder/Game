@@ -73,11 +73,11 @@ if st.session_state.pagina == "home":
     st.image("https://cdn.pixabay.com/photo/2017/01/31/21/22/game-2028329_1280.png", use_container_width=True)
 
 # ---- GAMES IMPLEMENTATIES ----
-from games.raad_het_getal import raad_het_getal
-from games.steen_papier_schaar import steen_papier_schaar
-from games.tic_tac_toe import tic_tac_toe
-from games.memory_game import memory_game
-from games.dobbelsteen import dobbelsteen
+from raad_het_getal import raad_het_getal
+from steen_papier_schaar import steen_papier_schaar
+from tic_tac_toe import tic_tac_toe
+from memory_game import memory_game
+from dobbelsteen import dobbelsteen
 # Match pagina met functie
 game_functions = {
     "raad_het_getal": raad_het_getal,
