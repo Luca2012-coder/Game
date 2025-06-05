@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import random
 
-WIDTH = 250
-HEIGHT = 350
+WIDTH = 100
+HEIGHT = 150
 blokje_x = 70
 
 def reset_pijp():
