@@ -56,7 +56,7 @@ if "pagina" not in st.session_state:
 st.sidebar.title("🎮 Mini Games")
 games = [
     "Raad het Getal", "Steen Papier Schaar", "Tic Tac Toe", 
-    "Dobbelsteen", "flappy"
+    "Dobbelsteen"
 ]
 
 for game in games:
@@ -78,7 +78,7 @@ from steen_papier_schaar import steen_papier_schaar
 from tic_tac_toe import tic_tac_toe
 from memory_game import memory_game
 from dobbelsteen import dobbelsteen
-from flappy import flappy
+
 
 # Match pagina met functie
 game_functions = {
@@ -87,7 +87,6 @@ game_functions = {
     "tic_tac_toe": tic_tac_toe,
     "memory_game": memory_game,
     "dobbelsteen": dobbelsteen,
-    "flappy": flappy,
 }
 
 if st.session_state.pagina in game_functions:
