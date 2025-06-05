@@ -2,23 +2,35 @@ import streamlit as st
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import random
-import time
+
+WIDTH = 400
+HEIGHT = 600
+blokje_x = 100
+
+def reset_pijp():
+    gat_y = random.randint(150, 450)
+    start_x = WIDTH
+    return {'x': start_x, 'gat_y': gat_y}
+
+def rects_collide(r1, r2):
+    # r = [x, y, width, height]
+    return not (r1[0] + r1[2] < r2[0] or r1[0] > r2[0] + r2[2] or
+                r1[1] + r1[3] < r2[1] or r1[1] > r2[1] + r2[3])
 
 def flappy():
-    WIDTH = 400
-    HEIGHT = 600
-    blokje_x = 100
-
-    # Helper functies binnen flappy
-    def reset_pijp():
-        gat_y = random.randint(150, 450)
-        start_x = WIDTH
-        return {'x': start_x, 'gat_y': gat_y}
-
-    def rects_collide(r1, r2):
-        # r = [x, y, width, height]
-        return not (r1[0] + r1[2] < r2[0] or r1[0] > r2[0] + r2[2] or
-                    r1[1] + r1[3] < r2[1] or r1[1] > r2[1] + r2[3])
+    # Initialiseer sessiestate-variabelen als ze niet bestaan
+    if 'blokje_y' not in st.session_state:
+        st.session_state.blokje_y = HEIGHT // 2
+    if 'zwaartekracht' not in st.session_state:
+        st.session_state.zwaartekracht = 0
+    if 'pijpen' not in st.session_state:
+        st.session_state.pijpen = [reset_pijp()]
+    if 'score' not in st.session_state:
+        st.session_state.score = 0
+    if 'started' not in st.session_state:
+        st.session_state.started = False
+    if 'game_over' not in st.session_state:
+        st.session_state.game_over = False
 
     def teken_spel():
         fig, ax = plt.subplots(figsize=(4,6))
@@ -26,21 +38,19 @@ def flappy():
         ax.set_ylim(0, HEIGHT)
         ax.axis('off')
 
-        # teken blokje
+        # blokje tekenen
         blokje = patches.Rectangle((blokje_x-15, st.session_state.blokje_y-15), 30, 30, color='orange')
         ax.add_patch(blokje)
 
-        # teken pijpen
+        # pijpen tekenen
         for pijp in st.session_state.pijpen:
-            # bovenpijp
             boven = patches.Rectangle((pijp['x'], 0), 50, pijp['gat_y'] - 75, color='green')
-            ax.add_patch(boven)
-            # onderpijp
             onder = patches.Rectangle((pijp['x'], pijp['gat_y'] + 75), 50, HEIGHT - pijp['gat_y'] - 75, color='green')
+            ax.add_patch(boven)
             ax.add_patch(onder)
 
-        # score tekst
-        ax.text(10, HEIGHT-30, f"Score: {st.session_state.score}", fontsize=15, color='black')
+        # score
+        ax.text(10, HEIGHT - 30, f"Score: {st.session_state.score}", fontsize=15, color='black')
 
         st.pyplot(fig)
 
@@ -58,17 +68,17 @@ def flappy():
         for pijp in st.session_state.pijpen:
             pijp['x'] -= 2
 
-        # voeg nieuwe pijp toe als de laatste pijp voorbij helft is
-        if st.session_state.pijpen[-1]['x'] < WIDTH/2:
+        # voeg nieuwe pijp toe als laatste pijp voorbij de helft is
+        if st.session_state.pijpen[-1]['x'] < WIDTH / 2:
             st.session_state.pijpen.append(reset_pijp())
 
-        # verwijder pijpen buiten beeld
+        # verwijder pijpen buiten beeld + score verhogen
         if st.session_state.pijpen[0]['x'] < -50:
             st.session_state.pijpen.pop(0)
             st.session_state.score += 1
 
-        # check botsingen
-        blokje_rect = [blokje_x -15, st.session_state.blokje_y -15, 30, 30]
+        # botsing checken
+        blokje_rect = [blokje_x - 15, st.session_state.blokje_y - 15, 30, 30]
         for pijp in st.session_state.pijpen:
             boven_rect = [pijp['x'], 0, 50, pijp['gat_y'] - 75]
             onder_rect = [pijp['x'], pijp['gat_y'] + 75, 50, HEIGHT - pijp['gat_y'] - 75]
@@ -78,21 +88,7 @@ def flappy():
         if st.session_state.blokje_y > HEIGHT or st.session_state.blokje_y < 0:
             st.session_state.game_over = True
 
-    # Initialize session state
-    if 'blokje_y' not in st.session_state:
-        st.session_state.blokje_y = HEIGHT // 2
-    if 'zwaartekracht' not in st.session_state:
-        st.session_state.zwaartekracht = 0
-    if 'pijpen' not in st.session_state:
-        st.session_state.pijpen = [reset_pijp()]
-    if 'score' not in st.session_state:
-        st.session_state.score = 0
-    if 'started' not in st.session_state:
-        st.session_state.started = False
-    if 'game_over' not in st.session_state:
-        st.session_state.game_over = False
-
-    st.title("Flappy Blok (Streamlit Mini-Game)")
+    st.title("Flappy Blok")
 
     if st.session_state.game_over:
         st.write(f"Game over! Je score: {st.session_state.score}")
@@ -105,17 +101,12 @@ def flappy():
             st.session_state.game_over = False
     else:
         if not st.session_state.started:
-            if st.button("Start spel (druk op Start)"):
+            if st.button("Start spel"):
                 st.session_state.started = True
         else:
-            if st.button("Spring! (Space)"):
+            if st.button("Spring!"):
                 update_game(jump=True)
             else:
                 update_game(jump=False)
 
         teken_spel()
-
-    # Refresh elke 0.1 sec om het spel te laten lopen
-    if st.session_state.started and not st.session_state.game_over:
-        time.sleep(0.1)
-        st.experimental_rerun()
