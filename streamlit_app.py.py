@@ -78,7 +78,7 @@ from steen_papier_schaar import steen_papier_schaar
 from tic_tac_toe import tic_tac_toe
 from memory_game import memory_game
 from dobbelsteen import dobbelsteen
-import flappy
+from flappy import flappy
 
 # Match pagina met functie
 game_functions = {
