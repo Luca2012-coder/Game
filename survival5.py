@@ -261,13 +261,21 @@ else:
     st.error("💀 Je bent overleden. Ververs de pagina om opnieuw te starten.")
 
 # Zorg dat bij initialisatie (bv bovenaan je code) dit staat:
+# Bij initialisatie:
 if "days" not in st.session_state:
     st.session_state.days = 1
+if "record_days" not in st.session_state:
+    st.session_state.record_days = 1
 
-# Wanneer je naar een nieuwe dag gaat, doe dan:
+# Functie om naar een nieuwe dag te gaan en record bij te werken:
 def next_day():
     st.session_state.days += 1
-    # andere dag-gerelateerde updates hier...
+    # Update record als nodig
+    if st.session_state.days > st.session_state.record_days:
+        st.session_state.record_days = st.session_state.days
+    # ... andere dag-updates ...
 
-# In je Streamlit interface zet je ergens:
+# Toon in je app:
 st.write(f"Dag: {st.session_state.days}")
+st.write(f"Record (langst overleefd): {st.session_state.record_days}")
+
