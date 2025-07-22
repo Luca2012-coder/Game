@@ -23,13 +23,39 @@ if "initialized" not in st.session_state:
     st.session_state.initialized = True
 
 def update_stats():
+    # Voeg stats toe aan geschiedenis lijsten, houd lengte gelijk aan dagen
     st.session_state.health_history.append(st.session_state.health)
     st.session_state.food_history.append(st.session_state.food)
     st.session_state.water_history.append(st.session_state.water)
 
+def check_death():
+    if st.session_state.health <= 0 or st.session_state.food <= 0 or st.session_state.water <= 0:
+        st.session_state.alive = False
+        st.session_state.message = "Je bent overleden door gebrek aan gezondheid, voedsel of water."
+
+def next_day():
+    if not st.session_state.action_taken:
+        st.session_state.message = "Je moet eerst een actie kiezen voor je verder gaat."
+        return
+    st.session_state.days += 1
+    st.session_state.action_taken = False
+    # Verbruik voedsel en water
+    st.session_state.food -= 5
+    st.session_state.water -= 5
+    # Gezondheid daalt als weinig eten/water
+    if st.session_state.food < 10 or st.session_state.water < 10:
+        st.session_state.health -= 10
+    else:
+        # Kleine herstel als genoeg eten en water
+        if st.session_state.health < 100:
+            st.session_state.health += 5
+    # Update geschiedenis en check leven
+    update_stats()
+    check_death()
+
 def search_food():
     food_found = random.randint(5, 15)
-    bonus = random.choices([0, 5], weights=[0.8, 0.2])[0]  # 20% kans op bonus 5 voedsel
+    bonus = random.choices([0, 5], weights=[0.8, 0.2])[0]
     total_food = food_found + bonus
     st.session_state.food += total_food
     st.session_state.message = f"🍎 Je vond {total_food} voedsel! (Bonus: {bonus})"
@@ -138,8 +164,9 @@ with st.sidebar:
             st.write(f"✔️ {item}")
     if not any(st.session_state.inventory.values()):
         st.write("Nog niets")
+    st.write("---")
+    st.write(f"Dag: {st.session_state.days}")
 
-# Hoofdvenster met acties
 if st.session_state.alive:
     col1, col2, col3 = st.columns(3)
 
@@ -159,69 +186,77 @@ if st.session_state.alive:
                 gather_materials()
                 st.session_state.action_taken = True
 
-    col4, col5 = st.columns(2)
+    col4, col5, col6 = st.columns(3)
+
     with col4:
-        if st.button("Rust nemen"):
+        if st.button("Rust uit"):
             if not st.session_state.action_taken:
                 rest()
                 st.session_state.action_taken = True
     with col5:
-        if st.button("Omgeving verkennen"):
+        if st.button("Verkennen"):
             if not st.session_state.action_taken:
                 explore()
                 st.session_state.action_taken = True
+    with col6:
+        if st.button("Volgende dag"):
+            next_day()
 
     st.write("---")
     st.subheader("Craften")
     craft_col1, craft_col2, craft_col3 = st.columns(3)
     with craft_col1:
-        if st.button("Kampvuur (5 hout, 3 steen)"):
+        if st.button("Kampvuur maken (5 hout, 3 steen)"):
             craft("kampvuur")
     with craft_col2:
-        if st.button("Speer (4 hout, 2 steen)"):
+        if st.button("Speer maken (4 hout, 2 steen)"):
             craft("speer")
     with craft_col3:
-        if st.button("Waterfilter (5 steen)"):
+        if st.button("Waterfilter maken (5 steen)"):
             craft("waterfilter")
 
     st.write("---")
-    st.subheader("Vlees")
-    meat_col1, meat_col2 = st.columns(2)
-    with meat_col1:
-        if st.button("Kook vlees"):
+    st.subheader("Koken en eten")
+    cook_col1, cook_col2, cook_col3 = st.columns(3)
+    with cook_col1:
+        if st.button("Kook rauw vlees"):
             cook_meat()
-    with meat_col2:
-        if st.button("Eet rauw vlees"):
-            eat_meat(cooked=False)
+    with cook_col2:
         if st.button("Eet gekookt vlees"):
             eat_meat(cooked=True)
+    with cook_col3:
+        if st.button("Eet rauw vlees"):
+            eat_meat(cooked=False)
 
-    # Toon de laatste actie / melding
-    st.info(st.session_state.message)
+    st.write("---")
+    st.markdown(f"**Status:** {st.session_state.message}")
 
-else:
-    st.error("💀 Je bent overleden.")
-    st.write(f"Je hebt {st.session_state.days} dagen overleefd.")
-    if st.button("Opnieuw beginnen"):
-        for key in st.session_state.keys():
-            del st.session_state[key]
-        st.experimental_rerun()
+    st.write("---")
+    st.subheader("Logboek")
+    for log in reversed(st.session_state.logboek[-10:]):
+        st.write(log)
 
-# Logboek en grafieken
-with st.expander("📖 Logboek"):
-    for line in st.session_state.logboek[-20:]:
-        st.write(line)
+    st.write("---")
+    st.subheader("Statistieken over tijd")
+    days = list(range(1, st.session_state.days + 1))
+    min_len = min(len(days), len(st.session_state.health_history), len(st.session_state.food_history), len(st.session_state.water_history))
+    if min_len > 0:
+        days_plot = days[:min_len]
+        health_plot = st.session_state.health_history[:min_len]
+        food_plot = st.session_state.food_history[:min_len]
+        water_plot = st.session_state.water_history[:min_len]
 
-with st.expander("📊 Statistieken"):
-    days = list(range(1, st.session_state.days+1))
-    if days:
-        fig, ax = plt.subplots(figsize=(8,4))
-        ax.plot(days, st.session_state.health_history, label="Gezondheid")
-        ax.plot(days, st.session_state.food_history, label="Eten")
-        ax.plot(days, st.session_state.water_history, label="Water")
+        fig, ax = plt.subplots(figsize=(8, 4))
+        ax.plot(days_plot, health_plot, label="Gezondheid")
+        ax.plot(days_plot, food_plot, label="Eten")
+        ax.plot(days_plot, water_plot, label="Water")
         ax.set_xlabel("Dag")
         ax.set_ylabel("Waarde")
         ax.legend()
         st.pyplot(fig)
     else:
         st.write("Speel een dag om statistieken te zien.")
+
+else:
+    st.error("💀 Je bent overleden. Ververs de pagina om opnieuw te starten.")
+
