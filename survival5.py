@@ -260,3 +260,14 @@ if st.session_state.alive:
 else:
     st.error("💀 Je bent overleden. Ververs de pagina om opnieuw te starten.")
 
+# Zorg dat bij initialisatie (bv bovenaan je code) dit staat:
+if "days" not in st.session_state:
+    st.session_state.days = 1
+
+# Wanneer je naar een nieuwe dag gaat, doe dan:
+def next_day():
+    st.session_state.days += 1
+    # andere dag-gerelateerde updates hier...
+
+# In je Streamlit interface zet je ergens:
+st.write(f"Dag: {st.session_state.days}")
