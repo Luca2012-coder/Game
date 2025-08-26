@@ -1,6 +1,3 @@
-# Writing the full Streamlit mafia parody game app to a file
-
-code = r'''
 import streamlit as st
 import random
 from datetime import datetime
@@ -16,17 +13,18 @@ if "profiles" not in st.session_state:
 if "current_profile" not in st.session_state:
     st.session_state["current_profile"] = None
 
-# Default shop items (cosmetic parody items)
+# Shop items (parodie)
 SHOP_ITEMS = {
     "Fedora": {"price": 100, "emoji": "🎩", "xp": 10},
     "Sunglasses": {"price": 150, "emoji": "🕶️", "xp": 15},
     "Gold Chain": {"price": 300, "emoji": "📿", "xp": 30},
     "Fancy Suit": {"price": 500, "emoji": "🤵", "xp": 50},
-    "Black Boots": {"price": 120, "emoji": "👞", "xp": 12},
-    "Nonna's Recipe": {"price": 80, "emoji": "📜", "xp": 8},
-    "Motorcycle": {"price": 800, "emoji": "🏍️", "xp": 80}
+    "Motorcycle": {"price": 800, "emoji": "🏍️", "xp": 80},
+    "Nonna's Pizza": {"price": 200, "emoji": "🍕", "xp": 20},
+    "Secret Recipe": {"price": 400, "emoji": "📜", "xp": 40}
 }
 
+# Ranks
 RANKS = [
     (0, "Rookie"),
     (100, "Associate"),
@@ -69,7 +67,6 @@ def add_money(profile, amount, reason=""):
 def add_xp(profile, amount, reason=""):
     profile["xp"] += amount
     save_event(profile, f"+{amount} XP {reason}")
-    # Level up logic
     profile["level"] = 1 + profile["xp"] // 100
 
 def get_rank(profile):
@@ -133,7 +130,7 @@ with tabs[1]:
     else:
         p = get_profile(st.session_state["current_profile"])
 
-        st.subheader("Mini-quiz")
+        st.subheader("Mini-quiz 🍝")
         q = st.radio("Wat is de geheime saus van La Famiglia?", ["Tomaat", "Pesto", "Pizza", "Olijfolie"])
         if st.button("Beantwoord quiz"):
             if q == "Tomaat":
@@ -203,10 +200,3 @@ with tabs[3]:
         st.markdown("### Geschiedenis")
         for e in reversed(p["history"]):
             st.write(f"[{e['time']}] {e['text']}")
-'''
-
-path = "/mnt/data/la_famiglia_game.py"
-with open(path, "w", encoding="utf-8") as f:
-    f.write(code)
-
-path
