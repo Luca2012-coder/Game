@@ -1,8 +1,6 @@
 import streamlit as st
 import random
-import time
 from datetime import datetime
-import pandas as pd
 
 st.set_page_config(page_title="La Famiglia – Parodie Game", page_icon="🍝", layout="wide")
 
@@ -15,7 +13,7 @@ if "profiles" not in st.session_state:
 if "current_profile" not in st.session_state:
     st.session_state["current_profile"] = None
 
-# Default shop items (cosmetic)
+# Default shop items (cosmetic only, parodie-stijl)
 SHOP_ITEMS = {
     "Fedora": {"price": 100, "emoji": "🎩", "xp": 10},
     "Sunglasses": {"price": 150, "emoji": "🕶️", "xp": 15},
@@ -59,167 +57,149 @@ def get_profile(name):
     return st.session_state["profiles"].get(name)
 
 def save_event(profile, text):
-    profile["history"].append(
-        {"time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "text": text}
-    )
+    profile["history"].append({"time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "text": text})
 
 def add_money(profile, amount, reason=""):
     profile["money"] += amount
     save_event(profile, f"+€{amount} {reason}")
 
-def add_xp(profile, amount):
+def add_xp(profile, amount, reason=""):
     profile["xp"] += amount
-    save_event(profile, f"+{amount} XP")
+    save_event(profile, f"+{amount} XP {reason}")
 
-def get_rank(profile):
-    rank_name = "Rookie"
-    for xp_needed, rank in RANKS:
-        if profile["xp"] >= xp_needed:
-            rank_name = rank
-    return rank_name
+def get_rank(xp):
+    current_rank = "Rookie"
+    for req, title in RANKS:
+        if xp >= req:
+            current_rank = title
+    return current_rank
 
 def render_avatar(profile):
-    base = profile["avatar"]["base"]
-    items = "".join([SHOP_ITEMS[it]["emoji"] for it in profile["items"]])
-    return base + items
+    return profile["avatar"]["base"] + "".join(profile["avatar"]["items"])
 
 # -------------------------
-# Minigames
+# Tabs
 # -------------------------
-def quiz_game(profile):
-    st.subheader("🧠 Mafia Trivia")
-    q = random.choice([
-        ("Wat is de favoriete Italiaanse maaltijd van de familie?", ["Pizza", "Sushi", "Taco"], "Pizza"),
-        ("Hoe zeg je 'familie' in het Italiaans?", ["Familia", "Famiglia", "Famille"], "Famiglia"),
-        ("Welke saus hoort bij spaghetti?", ["Tomaat", "Chocolade", "Ketchup"], "Tomaat")
-    ])
-    answer = st.radio(q[0], q[1], key="quiz")
-    if st.button("Beantwoord quiz"):
-        if answer == q[2]:
-            st.success("Correct! Je verdient €50 en 20 XP.")
-            add_money(profile, 50, "Quiz winst")
-            add_xp(profile, 20)
-        else:
-            st.error("Fout! Geen beloning dit keer.")
-            save_event(profile, "Fout in quiz")
+tab1, tab2, tab3, tab4 = st.tabs(["📜 Profiel", "🎮 Spelen", "🛍️ Shop", "⭐ Rang & Geschiedenis"])
 
-def luck_game(profile):
-    st.subheader("🎲 Geluksrad")
-    if st.button("Draai aan het rad"):
-        result = random.randint(1, 10)
-        if result == 10:
-            st.success("Jackpot! Je wint €500 en 100 XP")
-            add_money(profile, 500, "Jackpot")
-            add_xp(profile, 100)
-        elif result > 6:
-            st.info("Je wint €100")
-            add_money(profile, 100, "Geluksrad")
-        else:
-            st.warning("Helaas, niets dit keer")
-            save_event(profile, "Leeg geluksrad")
+# -------------------------
+# Profiel
+# -------------------------
+with tab1:
+    st.header("Sollicitatieformulier – Word lid van La Famiglia 🍝")
 
-def shooting_game(profile):
-    st.subheader("🎯 Waterballon Schietspel")
-    if "shooting_score" not in st.session_state:
-        st.session_state["shooting_score"] = 0
-    if st.button("Gooi waterballon! 💦"):
-        hit = random.choice([True, False, False, True])
-        if hit:
-            st.session_state["shooting_score"] += 1
-            st.success("Raak! +€20")
-            add_money(profile, 20, "Raak target")
-        else:
-            st.warning("Mis! Probeer opnieuw.")
-    st.write(f"Score: {st.session_state['shooting_score']}")
+    if st.session_state["current_profile"] is None:
+        with st.form("new_profile"):
+            name = st.text_input("Naam")
+            age = st.number_input("Leeftijd", min_value=10, max_value=99, value=18)
+            bio = st.text_area("Vertel iets over jezelf")
+            submit = st.form_submit_button("Indienen")
+
+        if submit and name:
+            if name in st.session_state["profiles"]:
+                st.warning("Deze naam bestaat al, kies een andere.")
+            else:
+                profile = create_profile(name, age, bio)
+                st.success(f"Welkom {name}! Je bent nu een rookie in de familie.")
+    else:
+        profile = get_profile(st.session_state["current_profile"])
+        st.subheader(f"Actief profiel: {profile['name']}")
+        st.write("Avatar:", render_avatar(profile))
+        st.write("💰 Geld:", profile["money"])
+        st.write("⭐ XP:", profile["xp"])
+        st.write("🎖️ Rang:", get_rank(profile["xp"]))
+        if st.button("Uitloggen"):
+            st.session_state["current_profile"] = None
+
+# -------------------------
+# Spelen
+# -------------------------
+with tab2:
+    st.header("🎮 Familie-minigames")
+
+    if st.session_state["current_profile"] is None:
+        st.info("Maak eerst een profiel aan bij 📜 Profiel.")
+    else:
+        profile = get_profile(st.session_state["current_profile"])
+
+        st.subheader("Maffia Quiz")
+        q = st.radio("Wat is de favoriete maaltijd van de familie?", ["Pizza", "Sushi", "Hamburger"])
+        if st.button("Beantwoord"):
+            if q == "Pizza":
+                add_money(profile, 50, "Quiz beloning")
+                add_xp(profile, 20, "Quiz beloning")
+                st.success("Correct! Je hebt geld en XP verdiend.")
+            else:
+                st.error("Fout! Geen beloning deze keer.")
+
+        st.subheader("Geluksrad")
+        if st.button("Draai het rad"):
+            outcome = random.choice(["Geld", "XP", "Niks"])
+            if outcome == "Geld":
+                add_money(profile, 100, "Geluksrad")
+                st.success("Je won €100!")
+            elif outcome == "XP":
+                add_xp(profile, 50, "Geluksrad")
+                st.success("Je won 50 XP!")
+            else:
+                st.warning("Helaas, niks gewonnen...")
+
+        st.subheader("Klik-spelletje")
+        if "click_score" not in profile:
+            profile["click_score"] = 0
+        if st.button("Klik!"):
+            profile["click_score"] += 1
+            if profile["click_score"] % 5 == 0:
+                add_money(profile, 20, "Klik-spel")
+                add_xp(profile, 10, "Klik-spel")
+                st.balloons()
+            st.write("Score:", profile["click_score"])
 
 # -------------------------
 # Shop
 # -------------------------
-def shop(profile):
-    st.subheader("🛒 Shop – Koop attributen")
-    st.write(f"Huidig geld: €{profile['money']}")
-    for item, data in SHOP_ITEMS.items():
-        if item in profile["items"]:
-            st.write(f"{data['emoji']} {item} – AL GEKOCHT")
-        else:
-            if st.button(f"Koop {data['emoji']} {item} (€{data['price']})"):
-                if profile["money"] >= data["price"]:
-                    profile["money"] -= data["price"]
-                    profile["items"].append(item)
-                    add_xp(profile, data["xp"])
-                    save_event(profile, f"Kocht {item}")
-                    st.success(f"{item} gekocht!")
-                else:
-                    st.error("Niet genoeg geld!")
-
-# -------------------------
-# Pages
-# -------------------------
-st.title("🍝 La Famiglia – Parodie Mafia Sollicitatie Game")
-
-tab1, tab2, tab3, tab4 = st.tabs(["Profiel", "Spelen", "Shop", "Rang & Geschiedenis"])
-
-with tab1:
-    st.header("Maak of kies je profiel")
-    existing = list(st.session_state["profiles"].keys())
-    if existing:
-        choice = st.selectbox("Bestaand profiel", ["--"] + existing)
-        if choice != "--":
-            st.session_state["current_profile"] = choice
-
-    with st.form("new_profile"):
-        st.subheader("Nieuw profiel")
-        name = st.text_input("Naam")
-        age = st.number_input("Leeftijd", 10, 99)
-        bio = st.text_area("Korte bio")
-        submitted = st.form_submit_button("Maak profiel")
-        if submitted and name:
-            if name in st.session_state["profiles"]:
-                st.error("Naam bestaat al")
-            else:
-                create_profile(name, age, bio)
-                st.success(f"Profiel {name} aangemaakt!")
-
-    if st.session_state["current_profile"]:
-        profile = get_profile(st.session_state["current_profile"])
-        st.subheader("Actief Profiel")
-        st.write(f"Naam: {profile['name']} | Leeftijd: {profile['age']}")
-        st.write(f"Bio: {profile['bio']}")
-        st.write("Avatar: " + render_avatar(profile))
-        st.write(f"Geld: €{profile['money']} | XP: {profile['xp']} | Rang: {get_rank(profile)}")
-
-with tab2:
-    if not st.session_state["current_profile"]:
-        st.warning("Maak eerst een profiel aan.")
-    else:
-        profile = get_profile(st.session_state["current_profile"])
-        st.header("Minigames")
-        game = st.radio("Kies een spel", ["Quiz", "Geluksrad", "Schietspel"])
-        if game == "Quiz":
-            quiz_game(profile)
-        elif game == "Geluksrad":
-            luck_game(profile)
-        elif game == "Schietspel":
-            shooting_game(profile)
-
 with tab3:
-    if not st.session_state["current_profile"]:
-        st.warning("Maak eerst een profiel aan.")
-    else:
-        profile = get_profile(st.session_state["current_profile"])
-        shop(profile)
+    st.header("🛍️ Shop – Koop attributen voor je avatar")
 
-with tab4:
-    if not st.session_state["current_profile"]:
-        st.warning("Maak eerst een profiel aan.")
+    if st.session_state["current_profile"] is None:
+        st.info("Maak eerst een profiel aan bij 📜 Profiel.")
     else:
         profile = get_profile(st.session_state["current_profile"])
-        st.header("Familie Rang & Geschiedenis")
-        st.write(f"Rang: {get_rank(profile)}")
-        st.write(f"Avatar: {render_avatar(profile)}")
-        st.write("### Geschiedenis")
-        df = pd.DataFrame(profile["history"])
-        if not df.empty:
-            st.table(df)
-        else:
-            st.info("Nog geen gebeurtenissen")
+        st.write("💰 Jouw geld:", profile["money"])
+        for item, data in SHOP_ITEMS.items():
+            col1, col2, col3 = st.columns([2,1,1])
+            with col1:
+                st.write(f"{data['emoji']} {item} – €{data['price']} (+{data['xp']} XP)")
+            with col2:
+                if item in profile["items"]:
+                    st.success("Gekocht")
+                else:
+                    if st.button(f"Koop {item}", key=item):
+                        if profile["money"] >= data["price"]:
+                            profile["money"] -= data["price"]
+                            profile["items"].append(item)
+                            profile["avatar"]["items"].append(data["emoji"])
+                            add_xp(profile, data["xp"], f"Gekocht: {item}")
+                            save_event(profile, f"Kocht {item}")
+                            st.experimental_rerun()
+                        else:
+                            st.error("Niet genoeg geld!")
+
+# -------------------------
+# Rang & Geschiedenis
+# -------------------------
+with tab4:
+    st.header("⭐ Jouw Familie-status")
+    if st.session_state["current_profile"] is None:
+        st.info("Maak eerst een profiel aan bij 📜 Profiel.")
+    else:
+        profile = get_profile(st.session_state["current_profile"])
+        st.write("Naam:", profile["name"])
+        st.write("Avatar:", render_avatar(profile))
+        st.write("💰 Geld:", profile["money"])
+        st.write("⭐ XP:", profile["xp"])
+        st.write("🎖️ Rang:", get_rank(profile["xp"]))
+
+        st.subheader("📜 Geschiedenis")
+        for h in reversed(profile["history"]):
+            st.write(f"{h['time']}: {h['text']}")
