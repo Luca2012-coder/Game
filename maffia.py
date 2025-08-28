@@ -68,9 +68,9 @@ def new_profile(name):
     return {
         "name": name,
         "created": datetime.now().isoformat(timespec="seconds"),
-        "money": 120,
-        "xp": 0,
-        "level": 1,
+        "money": 110000000,
+        "xp": 110000000,
+        "level": 100000,
         "items": [],
         "avatar": {"base": random.choice(BASE_AVATARS), "top":"", "eyes":"", "neck":"", "torso":"", "feet":"", "side":""},
         "history": [],
@@ -82,6 +82,7 @@ def save_event(profile, text):
     autosave()
 
 def get_rank(xp):
+    if xp >= 7000: return "capo di capi"
     if xp >= 3001: return "Boss"
     if xp >= 1501: return "Underboss"
     if xp >= 701: return "Consigliere"
