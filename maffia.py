@@ -1,22 +1,30 @@
-# la_famiglia_turnbased.py
-# Streamlit app — La Famiglia parody game with turn-based PacMan-style daily mission
-# Single-file app, persists profiles to profiles.json
+# la_famiglia_secure_game.py
+# Complete Streamlit app: profiles with password, city choice, avatar, hard earning,
+# 1x/day random mission, shop, ranks, and persistent profiles.json.
 #
 # Run:
 #   pip install streamlit
-#   streamlit run la_famiglia_turnbased.py
+#   streamlit run la_famiglia_secure_game.py
 
 import streamlit as st
 import json
 import random
+import hashlib
 from datetime import date, datetime
 from pathlib import Path
 
-# ---------- Config ----------
+# -----------------------
+# Config
+# -----------------------
 DATA_FILE = Path("profiles.json")
-st.set_page_config(page_title="La Famiglia — Turn-based Mission", page_icon="🍝", layout="wide")
+st.set_page_config(page_title="La Famiglia – Secure Parody Game", page_icon="🍝", layout="wide")
 
-# Avatar/shop config (emoji layers)
+CITIES = [
+    "Florence", "Bologna", "Milaan", "Sicilië", "Sardinië", "Rome", "Palermo",
+    "Bari", "Turijn", "Lombardo", "Venetië", "Empoli", "Napels", "Genua",
+    "Verona", "Parma", "Calabrië"
+]
+
 SHOP_ITEMS = {
     "Fedora": {"price": 300, "emoji": "🎩", "pos": "top", "xp": 18},
     "Sunglasses": {"price": 350, "emoji": "🕶️", "pos": "eyes", "xp": 22},
@@ -24,23 +32,30 @@ SHOP_ITEMS = {
     "Fancy Suit": {"price": 1200, "emoji": "🤵", "pos": "torso", "xp": 90},
     "Black Boots": {"price": 420, "emoji": "👞", "pos": "feet", "xp": 24},
     "Motorcycle": {"price": 2200, "emoji": "🏍️", "pos": "side", "xp": 150},
+    "Recipe Scroll": {"price": 280, "emoji": "📜", "pos": "side", "xp": 20}
 }
+
 BASE_AVATARS = ["😎", "🕵️", "👨‍🍳", "🧑‍💼", "🧑‍🏭", "👴", "👩‍🦳"]
 
-# mission grid
-GRID_W = 11
-GRID_H = 9
-MAX_TURNS = 60  # max moves in mission
-COINS_TARGET = 8  # coins to collect to win faster
+RANKS = [
+    (0, "Rekruut"),
+    (101, "Soldato"),
+    (301, "Capo"),
+    (701, "Consigliere"),
+    (1501, "Underboss"),
+    (3001, "Boss"),
+]
 
-# ---------- Persistence ----------
+# -----------------------
+# Persistence helpers
+# -----------------------
 def load_profiles():
     if DATA_FILE.exists():
         try:
             with DATA_FILE.open("r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
-            # backup and start fresh
+            # corrupt: back up
             backup = DATA_FILE.with_suffix(".broken.json")
             DATA_FILE.replace(backup)
             return {}
@@ -56,44 +71,72 @@ def save_profiles(profiles):
 def autosave():
     save_profiles(st.session_state["profiles"])
 
-# ---------- Session init ----------
+# -----------------------
+# Security helpers
+# -----------------------
+def hash_password(password: str, salt: str) -> str:
+    # simple salted sha256 (ok for this game demo)
+    return hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
+
+def make_salt(name: str) -> str:
+    # deterministic salt per username; not cryptographically strong but OK here
+    return hashlib.sha256(("salt:" + name).encode("utf-8")).hexdigest()[:16]
+
+# -----------------------
+# Session init
+# -----------------------
 if "profiles" not in st.session_state:
-    st.session_state["profiles"] = load_profiles()
+    st.session_state["profiles"] = load_profiles()  # mapping name -> profile dict
 
-if "current_profile" not in st.session_state:
-    st.session_state["current_profile"] = None
+if "logged_in" not in st.session_state:
+    st.session_state["logged_in"] = False
+if "username" not in st.session_state:
+    st.session_state["username"] = None
 
-# ---------- Profile helpers ----------
-def new_profile(name):
+# -----------------------
+# Profile model helpers
+# -----------------------
+def new_profile_struct(name, password, city, age, bio, specialities):
+    salt = make_salt(name)
     return {
         "name": name,
+        "password_hash": hash_password(password, salt),
+        "salt": salt,
+        "city": city,
+        "age": age,
+        "bio": bio,
+        "specialities": specialities,
         "created": datetime.now().isoformat(timespec="seconds"),
-        "money": 120,
+        "money": 100,  # low starting money to keep it slow
         "xp": 0,
         "level": 1,
         "items": [],
         "avatar": {"base": random.choice(BASE_AVATARS), "top":"", "eyes":"", "neck":"", "torso":"", "feet":"", "side":""},
         "history": [],
-        "last_mission_date": None,
+        "last_mission_date": None
     }
+
+def verify_login(profiles, name, password):
+    if name not in profiles:
+        return False
+    prof = profiles[name]
+    salt = prof.get("salt", make_salt(name))
+    return hash_password(password, salt) == prof.get("password_hash", "")
 
 def save_event(profile, text):
     profile.setdefault("history", []).append({"time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "text": text})
     autosave()
 
 def get_rank(xp):
-    if xp >= 7000: return "capo di capi"
-    if xp >= 3001: return "Boss"
-    if xp >= 1501: return "Underboss"
-    if xp >= 701: return "Consigliere"
-    if xp >= 301: return "Capo"
-    if xp >= 101: return "Soldato"
-    if xp >= 50: return "Tip de mogool"
-    return "Rekruut"
+    rank = RANKS[0][1]
+    for req, title in RANKS:
+        if xp >= req:
+            rank = title
+    return rank
 
 def render_avatar(profile):
     a = profile["avatar"]
-    # top, eyes, neck, torso, feet, side
+    # assemble lines: top, eyes/face, neck, torso, feet
     lines = [
         a.get("top",""),
         f"{a.get('base','😎')}{a.get('eyes','')}",
@@ -107,349 +150,360 @@ def render_avatar(profile):
         avatar_str = avatar_str.replace("\n", f" {side}\n")
     return avatar_str
 
-# ---------- Mission (turn-based) helpers ----------
-def make_mission_state(seed=None):
-    """Create a mission state: walls, player, guards, coins, turns left."""
-    rng = random.Random(seed)
-    # simple walls: border + some inner blocks
-    walls = set()
-    for x in range(GRID_W):
-        walls.add((x, 0)); walls.add((x, GRID_H-1))
-    for y in range(GRID_H):
-        walls.add((0, y)); walls.add((GRID_W-1, y))
-    # add some random internal blocks
-    for _ in range((GRID_W*GRID_H)//8):
-        x = rng.randint(1, GRID_W-2); y = rng.randint(1, GRID_H-2)
-        walls.add((x,y))
-    # place player and guards and coins on empty cells
-    def rnd_empty(exclude):
-        while True:
-            x = rng.randint(1, GRID_W-2); y = rng.randint(1, GRID_H-2)
-            if (x,y) not in walls and (x,y) not in exclude:
-                return (x,y)
-    occupied = set()
-    player = rnd_empty(occupied); occupied.add(player)
-    guards = []
-    for _ in range(3):
-        g = rnd_empty(occupied); occupied.add(g); guards.append(g)
-    coins = set()
-    for _ in range(12):
-        c = rnd_empty(occupied); occupied.add(c); coins.add(c)
-    state = {
-        "walls": list(walls),
-        "player": player,
-        "guards": guards,
-        "coins": list(coins),
-        "turns": MAX_TURNS,
-        "seed": seed
-    }
-    return state
-
-def move_pos(pos, dir):
-    x,y = pos
-    if dir == "up": return (x, y-1)
-    if dir == "down": return (x, y+1)
-    if dir == "left": return (x-1, y)
-    if dir == "right": return (x+1, y)
-    return pos
-
-def in_bounds(pos):
-    x,y = pos
-    return 0 <= x < GRID_W and 0 <= y < GRID_H
-
-def neighbors(pos):
-    x,y = pos
-    return [(x+1,y),(x-1,y),(x,y+1),(x,y-1)]
-
-def guard_move_simple(guard_pos, player_pos, walls):
-    # simple behavior: try move towards player with random deviation
-    gx,gy = guard_pos
-    px,py = player_pos
-    choices = []
-    if px > gx: choices.append((gx+1,gy))
-    if px < gx: choices.append((gx-1,gy))
-    if py > gy: choices.append((gx,gy+1))
-    if py < gy: choices.append((gx,gy-1))
-    # add random neighbors
-    choices += neighbors(guard_pos)
-    random.shuffle(choices)
-    for c in choices:
-        if in_bounds(c) and c not in walls:
-            return c
-    return guard_pos
-
-# ---------- UI: Sidebar profiles ----------
-st.sidebar.title("Profielen")
-if st.sidebar.button("Nieuw profiel"):
-    st.session_state["creating_new"] = True
-
-profiles_list = list(st.session_state["profiles"].keys())
-selected = st.sidebar.selectbox("Selecteer profiel", options=["--nieuw--"] + profiles_list)
-if selected != "--nieuw--":
-    st.session_state["current_profile"] = selected; st.session_state["creating_new"] = False
-if "creating_new" not in st.session_state:
-    st.session_state["creating_new"] = False
-
-if st.sidebar.button("Verwijder huidig profiel"):
-    cur = st.session_state["current_profile"]
-    if cur and cur in st.session_state["profiles"]:
-        del st.session_state["profiles"][cur]; st.session_state["current_profile"]=None; autosave(); st.sidebar.success("Profiel verwijderd")
+# -----------------------
+# UI: Sidebar: login/create
+# -----------------------
+st.sidebar.title("Account")
+if st.session_state["logged_in"]:
+    st.sidebar.markdown(f"**Ingelogd als:** {st.session_state['username']}")
+    if st.sidebar.button("Uitloggen"):
+        st.session_state["logged_in"] = False
+        st.session_state["username"] = None
+        st.success("Uitgelogd")
+else:
+    st.sidebar.subheader("Nieuw account aanmaken")
+    with st.sidebar.form("create_account"):
+        new_name = st.text_input("Gebruikersnaam", key="new_name")
+        new_pass = st.text_input("Wachtwoord", type="password", key="new_pass")
+        city = st.selectbox("Stad", CITIES, key="new_city")
+        age = st.number_input("Leeftijd", min_value=16, max_value=99, value=25, key="new_age")
+        bio = st.text_area("Korte bio", key="new_bio")
+        special = st.multiselect("Specialiteiten (parodie)", ["Pizzabakken","Logistiek","Onderhandelen","Discretie","Financieel inzicht","PR","Technische hulp (IT)"], key="new_special")
+        create_sub = st.form_submit_button("Maak account")
+    if create_sub:
+        if not new_name.strip() or not new_pass:
+            st.sidebar.error("Naam en wachtwoord verplicht.")
+        elif new_name in st.session_state["profiles"]:
+            st.sidebar.error("Naam bestaat al. Kies een andere.")
+        else:
+            prof = new_profile_struct(new_name.strip(), new_pass, city, age, bio, special)
+            st.session_state["profiles"][new_name.strip()] = prof
+            autosave()
+            st.sidebar.success("Account aangemaakt. Log in onderaan.")
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Inloggen")
+    with st.sidebar.form("login"):
+        login_name = st.text_input("Naam", key="login_name")
+        login_pass = st.text_input("Wachtwoord", type="password", key="login_pass")
+        login_sub = st.form_submit_button("Login")
+    if login_sub:
+        if verify_login(st.session_state["profiles"], login_name.strip(), login_pass):
+            st.session_state["logged_in"] = True
+            st.session_state["username"] = login_name.strip()
+            st.sidebar.success("Succesvol ingelogd")
+        else:
+            st.sidebar.error("Login mislukt. Controleer naam/wachtwoord.")
 
 st.sidebar.markdown("---")
-st.sidebar.write("Tip: upgrades zijn duur — spaar langzaam. Speel dagelijkse missie 1× per dag (turn-based).")
+st.sidebar.markdown("Veiligheid: wachtwoorden worden hashed (lokale opslag). Deel ze niet met anderen.")
 
-# ---------- Main tabs ----------
-tab_profile, tab_earn, tab_mission, tab_shop, tab_rank = st.tabs(["📝 Profiel", "💼 Verdien (moeilijk)", "🎯 Dagelijkse missie", "🛍️ Shop", "📜 Rang & Historie"])
+# -----------------------
+# Main layout: tabs
+# -----------------------
+tab_profile, tab_earn, tab_mission, tab_shop, tab_rank = st.tabs([
+    "📝 Mijn profiel", "💼 Verdien (moeilijk)", "🎯 Dagelijkse missie", "🛍️ Shop & Avatar", "📜 Rang & Historie"
+])
 
-# ---------- Tab: Profile ----------
+# -----------------------
+# Tab: Profile
+# -----------------------
 with tab_profile:
-    st.header("Sollicitatie / Profiel")
-    if st.session_state["current_profile"] is None:
-        if st.session_state["creating_new"]:
-            with st.form("create"):
-                name = st.text_input("Naam")
-                submitted = st.form_submit_button("Maak profiel")
-            if submitted:
-                if not name.strip(): st.error("Geef een naam")
-                elif name.strip() in st.session_state["profiles"]: st.error("Naam bestaat")
-                else:
-                    st.session_state["profiles"][name.strip()] = new_profile(name.strip()); st.session_state["current_profile"] = name.strip(); autosave(); st.success("Profiel aangemaakt")
-        else:
-            st.info("Maak een nieuw profiel via de sidebar of klik 'Nieuw profiel' in de zijbalk.")
+    st.header("Mijn profiel & instellingen")
+    if not st.session_state["logged_in"]:
+        st.info("Log in of maak een account via de zijbalk.")
     else:
-        p = st.session_state["profiles"][st.session_state["current_profile"]]
-        st.subheader(f"{p['name']} — Rang: {get_rank(p['xp'])}")
-        st.markdown(f"**Geld:** €{p['money']}    **XP:** {p['xp']}    **Level:** {p['level']}")
-        st.markdown(f"<div style='font-size:72px; white-space:pre'>{render_avatar(p)}</div>", unsafe_allow_html=True)
-        if st.button("Laat profiel exporteren (JSON)"):
-            st.download_button("Download profiel JSON", data=json.dumps(p, ensure_ascii=False, indent=2), file_name=f"profile_{p['name']}.json")
-
-# ---------- Tab: Always-available earning (hard) ----------
-with tab_earn:
-    st.header("Altijd geld verdienen (moeilijk en risicovol)")
-    if st.session_state["current_profile"] is None:
-        st.info("Selecteer profiel in sidebar.")
-    else:
-        p = st.session_state["profiles"][st.session_state["current_profile"]]
-        st.write("Acties zijn laag-winst of riskant. Herhaal veel om iets te bereiken.")
-        col1, col2, col3 = st.columns(3)
+        name = st.session_state["username"]
+        profile = st.session_state["profiles"][name]
+        col1, col2 = st.columns([1,2])
         with col1:
-            st.subheader("Bescherming innen")
-            if st.button("Probeer innen"):
-                r = random.random()
-                if r < 0.48:
-                    gain = random.randint(10, 22); xp = random.randint(3,8)
-                    p["money"] += gain; p["xp"] += xp; save_event(p, f"Bescherming: +€{gain}, +{xp} XP"); st.success(f"+€{gain}, +{xp} XP")
-                else:
-                    loss = random.randint(6,16); p["money"] = max(0, p["money"]-loss); p["xp"] += 2; save_event(p, f"Bescherming mis: -€{loss}"); st.warning(f"Mis: -€{loss}")
-        with col2:
-            st.subheader("Kleine klus")
-            if st.button("Doe klus"):
-                if random.random() < 0.73:
-                    gain = random.randint(4,8); xp = random.randint(1,4)
-                    p["money"] += gain; p["xp"] += xp; save_event(p, f"Klus: +€{gain}, +{xp} XP"); st.success(f"+€{gain}, +{xp} XP")
-                else:
-                    save_event(p, "Klus mislukt"); st.info("Geen beloning")
-        with col3:
-            st.subheader("Gokken (gevaarlijk)")
-            if st.button("Waag gok (€10)"):
-                if p["money"] < 10: st.error("Niet genoeg geld")
-                else:
-                    p["money"] -= 10
-                    r = random.random()
-                    if r > 0.98:
-                        win = 140; xp = 20; p["money"] += win; p["xp"] += xp; save_event(p, f"Jackpot: +€{win}, +{xp} XP"); st.success(f"Jackpot! +€{win}")
-                    elif r > 0.88:
-                        win = 40; xp = 8; p["money"] += win; p["xp"] += xp; save_event(p, f"Gok winst: +€{win}"); st.info(f"Kleine winst +€{win}")
+            st.markdown(f"<div style='font-size:96px; white-space:pre'>{render_avatar(profile)}</div>", unsafe_allow_html=True)
+            st.write("Stad:", profile.get("city", "—"))
+            st.write("Leeftijd:", profile.get("age", "—"))
+            st.write("Specialiteiten:", ", ".join(profile.get("specialities", [])) or "—")
+            if st.button("Account verwijderen"):
+                # require password confirmation
+                pwd = st.text_input("Herhaal wachtwoord ter bevestiging", type="password", key="delpwd")
+                if pwd:
+                    if verify_login(st.session_state["profiles"], name, pwd):
+                        del st.session_state["profiles"][name]
+                        autosave()
+                        st.session_state["logged_in"] = False
+                        st.session_state["username"] = None
+                        st.success("Account verwijderd")
                     else:
-                        save_event(p, "Gok verlies -€10"); st.warning("Verloren -€10")
-        p["level"] = 1 + p["xp"] // 200
+                        st.error("Verkeerd wachtwoord")
+        with col2:
+            st.subheader(profile["name"])
+            st.write("Bio:", profile.get("bio",""))
+            st.write("Geld: €", profile.get("money",0))
+            st.write("XP:", profile.get("xp",0))
+            st.write("Level:", profile.get("level",1))
+            st.write("Rang:", get_rank(profile.get("xp",0)))
+            if st.button("Exporteer mijn profiel"):
+                st.download_button("Download JSON", data=json.dumps(profile, ensure_ascii=False, indent=2), file_name=f"profile_{profile['name']}.json")
+
+# -----------------------
+# Tab: Always-available earning (hard)
+# -----------------------
+with tab_earn:
+    st.header("Verdien (altijd mogelijk — maar moeilijk)")
+    if not st.session_state["logged_in"]:
+        st.info("Log in om acties uit te voeren.")
+    else:
+        profile = st.session_state["profiles"][st.session_state["username"]]
+        st.write("Deze acties zijn ontworpen om **traag** te laten groeien: kleine opbrengst, risico op verlies.")
+        st.markdown("---")
+        # Protection run
+        st.subheader("Bescherming innen")
+        st.caption("~48% kans op bescheiden winst, anders verlies.")
+        if st.button("Probeer binnen te halen"):
+            r = random.random()
+            if r < 0.48:
+                gain = random.randint(10,24)
+                xp = random.randint(3,7)
+                profile["money"] += gain
+                profile["xp"] += xp
+                save_event(profile, f"Bescherming gelukt: +€{gain}, +{xp} XP")
+                st.success(f"Succes! +€{gain}, +{xp} XP")
+            else:
+                loss = random.randint(6,18)
+                profile["money"] = max(0, profile["money"] - loss)
+                profile["xp"] += 2
+                save_event(profile, f"Bescherming faalde: -€{loss}, +2 XP")
+                st.warning(f"Fout — verlies €{loss} maar +2 XP")
+
+        st.markdown("---")
+        # Small jobs
+        st.subheader("Kleine klusjes")
+        st.caption("Meestal kleine opbrengst, soms niks.")
+        if st.button("Doe klusje"):
+            if random.random() < 0.72:
+                gain = random.randint(4,9)
+                xp = random.randint(1,4)
+                profile["money"] += gain
+                profile["xp"] += xp
+                save_event(profile, f"Klusje: +€{gain}, +{xp} XP")
+                st.success(f"+€{gain}, +{xp} XP")
+            else:
+                save_event(profile, "Klusje mislukt: geen opbrengst")
+                st.info("Geen opbrengst deze keer.")
+
+        st.markdown("---")
+        # Casino (risky)
+        st.subheader("Gokken (gevaarlijk)")
+        st.caption("Inzet €10 — vaak verlies, soms grote winst.")
+        if st.button("Waag gok (inzet €10)"):
+            if profile["money"] < 10:
+                st.error("Niet genoeg geld voor inzet.")
+            else:
+                profile["money"] -= 10
+                r = random.random()
+                if r > 0.98:
+                    win = 140; xp = 22
+                    profile["money"] += win; profile["xp"] += xp
+                    save_event(profile, f"Casino jackpot: +€{win}, +{xp} XP")
+                    st.success(f"Jackpot! +€{win}, +{xp} XP")
+                elif r > 0.87:
+                    win = 40; xp = 8
+                    profile["money"] += win; profile["xp"] += xp
+                    save_event(profile, f"Casino winst: +€{win}, +{xp} XP")
+                    st.info(f"Kleine winst +€{win}")
+                else:
+                    save_event(profile, "Casino verlies: -€10")
+                    st.warning("Verloren -€10")
+
+        # update level and save
+        profile["level"] = 1 + profile["xp"] // 200
         autosave()
 
-# ---------- Tab: Turn-based Daily Mission ----------
+# -----------------------
+# Tab: Daily mission (random mini-games)
+# -----------------------
 with tab_mission:
-    st.header("Dagelijkse missie (turn-based Pac-Man-achtig)")
-    if st.session_state["current_profile"] is None:
-        st.info("Selecteer eerst een profiel.")
+    st.header("Dagelijkse missie (1× per dag — random mini-game)")
+    if not st.session_state["logged_in"]:
+        st.info("Log in om je dagelijkse missie te spelen.")
     else:
-        p = st.session_state["profiles"][st.session_state["current_profile"]]
+        profile = st.session_state["profiles"][st.session_state["username"]]
         today = date.today().isoformat()
-        done_today = (p.get("last_mission_date") == today)
+        already = profile.get("last_mission_date") == today
+        st.write("Je kunt één echte missie per dag doen. Oefenen is mogelijk, maar geeft weinig/niets.")
+        if already:
+            st.info("Je hebt vandaag al een missie gedaan. Je kunt oefenen (geen echte beloning).")
+        st.markdown("---")
 
-        st.write(f"Vandaag: {'al gedaan' if done_today else 'nog open'} — je kunt de missie *één keer per dag* spelen voor echte beloning.")
-        st.write("Spelregels: je beweegt per beurt met de pijltjes. Verzamel munten (💰). Vermijd rivalen (👮).")
-        st.write(f"Doel: verzamel minstens {COINS_TARGET} munten binnen {MAX_TURNS} beurten voor een goede beloning.")
+        # choose a random mission type for today (deterministic per-profile-per-day)
+        seed = profile["name"] + today
+        rng = random.Random(seed)
+        mission_type = rng.choice(["guess_box", "dice_bet", "quick_quiz"])
+        st.write("Missie van vandaag:", mission_type.replace("_"," ").title())
 
-        # initialize mission state in session_state keyed by profile
-        key = f"mission_{p['name']}"
-        if key not in st.session_state:
-            # create a deterministic seed per day so layout is same for everyone that day
-            seed = f"{p['name']}_{today}"
-            st.session_state[key] = make_mission_state(seed=seed)
-
-        state = st.session_state[key]
-        walls = set(tuple(w) for w in state["walls"])
-        player = tuple(state["player"])
-        guards = [tuple(g) for g in state["guards"]]
-        coins = set(tuple(c) for c in state["coins"])
-        turns = state["turns"]
-
-        # render grid as emojis
-        def render_grid(player, guards, coins, walls):
-            grid = []
-            for y in range(GRID_H):
-                row = []
-                for x in range(GRID_W):
-                    if (x,y) in walls:
-                        row.append("⬛")
-                    elif (x,y) == player:
-                        row.append("😎")
-                    elif (x,y) in guards:
-                        row.append("👮")
-                    elif (x,y) in coins:
-                        row.append("💰")
+        # MISSION: guess_box (choose 1 of 3 boxes)
+        if mission_type == "guess_box":
+            st.subheader("Koffertjes-raadspel")
+            st.write("Er zijn 3 koffertjes. Eén bevat geld, de anderen zijn leeg (of met tegenslag).")
+            choice = st.radio("Welk koffertje open je?", ["1","2","3"], index=0, key=f"box_{profile['name']}")
+            if st.button("Open koffertje"):
+                correct = rng.randint(1,3)
+                if int(choice) == correct:
+                    # win
+                    if already:
+                        gain = int(rng.uniform(5,12) * 0.3)
+                        xp = int(rng.uniform(2,6) * 0.3)
+                        save_event(profile, f"Missie-oefening: koffertje (training) +€{gain}, +{xp} XP")
+                        st.success(f"Training: +€{gain}, +{xp} XP (reduced)")
                     else:
-                        row.append("·")
-                grid.append("".join(row))
-            return "\n".join(grid)
+                        gain = rng.randint(12, 32)
+                        xp = rng.randint(6, 14)
+                        profile["money"] += gain; profile["xp"] += xp
+                        profile["last_mission_date"] = today
+                        save_event(profile, f"Missie (koffertje) geslaagd: +€{gain}, +{xp} XP")
+                        st.success(f"Goed geraden! +€{gain}, +{xp} XP")
+                else:
+                    # wrong -> penalty (small)
+                    if already:
+                        st.info("Training: fout, geen straf.")
+                        save_event(profile, "Missie-oefening: koffertje fout (training)")
+                    else:
+                        loss = rng.randint(6, 18)
+                        profile["money"] = max(0, profile["money"] - loss)
+                        profile["last_mission_date"] = today
+                        save_event(profile, f"Missie (koffertje) mislukt: -€{loss}")
+                        st.error(f"Fout. Je verliest €{loss}")
 
-        st.markdown(f"<pre style='font-size:20px'>{render_grid(player, guards, coins, walls)}</pre>", unsafe_allow_html=True)
-        st.write(f"Munten verzameld: {len(state['coins']) and 0}  — beurten over: {turns}")
+        # MISSION: dice_bet
+        elif mission_type == "dice_bet":
+            st.subheader("Dobbelweddenschap")
+            st.write("Raad of dobbelsteen hoog (4-6) of laag (1-3). Inzet €5.")
+            bet = st.radio("Kies", ["Laag (1-3)", "Hoog (4-6)"], index=0, key=f"dice_{profile['name']}")
+            if st.button("Werp dobbelsteen"):
+                if profile["money"] < 5:
+                    st.error("Je hebt geen €5 inzet.")
+                else:
+                    profile["money"] -= 5
+                    roll = rng.randint(1,6)
+                    st.write(f"Rol: {roll}")
+                    pick_high = (bet.startswith("Hoog"))
+                    won = (roll >=4) if pick_high else (roll <=3)
+                    if already:
+                        # training: small/no rewards
+                        if won:
+                            gain = 3; xp = 2
+                            profile["money"] += gain; profile["xp"] += xp
+                            save_event(profile, f"Missie-oefening dobbel: +€{gain}, +{xp} XP")
+                            st.success(f"Training: +€{gain}, +{xp} XP")
+                        else:
+                            save_event(profile, "Missie-oefening dobbel: verloren")
+                            st.info("Training: verloren, geen echte straf.")
+                    else:
+                        if won:
+                            gain = rng.randint(15, 45); xp = rng.randint(6, 16)
+                            profile["money"] += gain; profile["xp"] += xp
+                            profile["last_mission_date"] = today
+                            save_event(profile, f"Missie dobbel gewonnen: +€{gain}, +{xp} XP (roll {roll})")
+                            st.success(f"Gewonnen! +€{gain}, +{xp} XP")
+                        else:
+                            loss = rng.randint(6,18)
+                            profile["money"] = max(0, profile["money"] - loss)
+                            profile["last_mission_date"] = today
+                            save_event(profile, f"Missie dobbel verloren: -€{loss} (roll {roll})")
+                            st.error(f"Verloren: -€{loss}")
 
-        # movement buttons
-        col_u, col_m, col_d = st.columns([1,4,1])
-        with col_m:
-            up = st.button("⬆️")
-        left_col, mid_col, right_col = st.columns([1,1,1])
-        with left_col:
-            left = st.button("⬅️")
-        with mid_col:
-            stay = st.button("•")
-        with right_col:
-            right = st.button("➡️")
-        with col_d:
-            down = st.button("⬇️")
+        # MISSION: quick_quiz
+        elif mission_type == "quick_quiz":
+            st.subheader("Snelle kennisquiz")
+            q_list = [
+                ("Wat hoort niet in klassieke carbonara?", ["Room","Eieren","Pancetta"], "Room"),
+                ("Welke stad staat bekend om pizza?", ["Napels","Milaan","Verona"], "Napels"),
+                ("Hoe zeg je 'familie' in het Italiaans?", ["Famiglia","Familia","Familie"], "Famiglia")
+            ]
+            q = rng.choice(q_list)
+            ans = st.radio(q[0], q[1], key=f"qq_{profile['name']}")
+            if st.button("Antwoord versturen"):
+                if ans == q[2]:
+                    if already:
+                        gain = int(rng.uniform(6,14)*0.3); xp = int(rng.uniform(3,8)*0.3)
+                        profile["money"] += gain; profile["xp"] += xp
+                        save_event(profile, f"Missie-oefening quiz: +€{gain}, +{xp} XP")
+                        st.success(f"Training: +€{gain}, +{xp} XP")
+                    else:
+                        gain = rng.randint(14, 40); xp = rng.randint(8, 18)
+                        profile["money"] += gain; profile["xp"] += xp
+                        profile["last_mission_date"] = today
+                        save_event(profile, f"Missie quiz geslaagd: +€{gain}, +{xp} XP")
+                        st.success(f"Correct! +€{gain}, +{xp} XP")
+                else:
+                    if already:
+                        st.info("Training: fout, geen straf.")
+                        save_event(profile, "Missie-oefening quiz fout")
+                    else:
+                        loss = rng.randint(5,15)
+                        profile["money"] = max(0, profile["money"] - loss)
+                        profile["last_mission_date"] = today
+                        save_event(profile, f"Missie quiz fout: -€{loss}")
+                        st.error(f"Fout: -€{loss}")
 
-        # handle move
-        moved = False
-        if any([up,left,down,right,stay]):
-            dir = None
-            if up: dir = "up"
-            elif down: dir = "down"
-            elif left: dir = "left"
-            elif right: dir = "right"
-            else: dir = "stay"
-            # compute new player pos
-            newpos = player if dir=="stay" else move_pos(player, dir)
-            if not in_bounds(newpos) or newpos in walls:
-                st.info("Je botst tegen een muur — zet gaat verloren maar telt als beurt.")
-                newpos = player
-            # collect coin?
-            if newpos in coins:
-                coins.remove(newpos)
-                save_event(p, "Munten gepakt in missie (momentopname)")
-            # update player
-            player = newpos
-            # guards move
-            new_guards = []
-            for g in guards:
-                ng = guard_move_simple(g, player, walls)
-                new_guards.append(ng)
-            guards = new_guards
-            # collision check
-            if player in guards:
-                st.error("Een rivaal heeft je gepakt! Missie mislukt.")
-                # mission fails: small penalty or no reward
-                p["money"] = max(0, p["money"] - 5)
-                save_event(p, "Missie gefaald: gepakt door rivaal (-€5)")
-                # mark mission done for today with tiny training reward
-                p["last_mission_date"] = today
-                autosave()
-                # reset session mission (so next day will be new)
-                del st.session_state[key]
-            else:
-                # reduce turns
-                state["turns"] = max(0, state["turns"] - 1)
-                state["player"] = player
-                state["guards"] = list(guards)
-                state["coins"] = list(coins)
-                autosave()
-                moved = True
+        autosave()
 
-        # check victory conditions
-        coins_collected = 12 - len(coins)  # original count was 12
-        # successful completion if coins_collected >= COINS_TARGET
-        if coins_collected >= COINS_TARGET and not done_today:
-            # reward: modest but meaningful
-            reward_money = 8 * coins_collected  # small per coin
-            reward_xp = 3 * coins_collected
-            p["money"] += reward_money
-            p["xp"] += reward_xp
-            p["last_mission_date"] = today
-            save_event(p, f"Dagelijkse missie geslaagd: +€{reward_money}, +{reward_xp} XP (munten: {coins_collected})")
-            autosave()
-            st.success(f"Missie voltooid! Je verdient €{reward_money} en {reward_xp} XP.")
-            # clear mission state to get new layout next day
-            del st.session_state[key]
-        elif state["turns"] <= 0 and not done_today:
-            st.info("Beurten op — missie voorbij. Je krijgt een kleine training beloning.")
-            # small training reward (so practice is okay)
-            p["money"] += 2
-            p["xp"] += 1
-            p["last_mission_date"] = today
-            save_event(p, "Missie tijd op: training beloning +€2 +1 XP")
-            autosave()
-            del st.session_state[key]
-        elif done_today:
-            st.info("Je hebt vandaag al een missie voltooid — je kunt oefenen, maar echte beloning is al opgehaald.")
-            # allow practice but low/no reward; don't modify profile significantly
-            if moved:
-                st.write("Training: je acties veranderen de grid maar geven geen echte beloning.")
-
-# ---------- Tab: Shop ----------
+# -----------------------
+# Tab: Shop & Avatar
+# -----------------------
 with tab_shop:
     st.header("Shop & Avatar")
-    if st.session_state["current_profile"] is None:
-        st.info("Selecteer eerst een profiel.")
+    if not st.session_state["logged_in"]:
+        st.info("Log in om de shop te gebruiken.")
     else:
-        p = st.session_state["profiles"][st.session_state["current_profile"]]
+        profile = st.session_state["profiles"][st.session_state["username"]]
         c1, c2 = st.columns([1,2])
         with c1:
             st.subheader("Avatar")
-            st.markdown(f"<div style='font-size:80px; white-space:pre'>{render_avatar(p)}</div>", unsafe_allow_html=True)
-            st.write("Items:", ", ".join(p["items"]) if p["items"] else "Geen")
+            st.markdown(f"<div style='font-size:96px; white-space:pre'>{render_avatar(profile)}</div>", unsafe_allow_html=True)
+            st.write("Gekocht:", ", ".join(profile["items"]) if profile["items"] else "Geen")
             st.markdown("---")
-            new_base = st.selectbox("Basis avatar", options=BASE_AVATARS, index=BASE_AVATARS.index(p["avatar"].get("base",BASE_AVATARS[0])))
+            new_base = st.selectbox("Basis avatar", options=BASE_AVATARS, index=BASE_AVATARS.index(profile["avatar"].get("base", BASE_AVATARS[0])))
             if st.button("Stel basis in"):
-                p["avatar"]["base"] = new_base; save_event(p, f"Basis avatar ingesteld"); autosave(); st.success("Basis avatar ingesteld")
+                profile["avatar"]["base"] = new_base
+                save_event(profile, f"Basis avatar ingesteld op {new_base}")
+                autosave()
+                st.success("Basis avatar aangepast")
         with c2:
             st.subheader("Items te koop")
-            st.write(f"Jouw geld: €{p['money']}")
+            st.write(f"Je geld: €{profile['money']}")
             for item, info in SHOP_ITEMS.items():
                 cols = st.columns([3,1,1])
-                with cols[0]: st.write(f"{info['emoji']} **{item}** — €{info['price']} (+{info['xp']} XP)")
-                with cols[1]: st.write("✅" if item in p["items"] else "❌")
+                with cols[0]:
+                    st.write(f"{info['emoji']} **{item}** — €{info['price']} (+{info['xp']} XP)")
+                with cols[1]:
+                    st.write("✅" if item in profile["items"] else "❌")
                 with cols[2]:
-                    if item not in p["items"]:
+                    if item not in profile["items"]:
                         if st.button(f"Koop {item}", key=f"buy_{item}"):
-                            if p["money"] >= info["price"]:
-                                p["money"] -= info["price"]; p["items"].append(item); p["avatar"][info["pos"]] = info["emoji"]; p["xp"] += info["xp"]; save_event(p, f"Gekocht {item}"); autosave(); st.success(f"{item} gekocht")
+                            if profile["money"] >= info["price"]:
+                                profile["money"] -= info["price"]
+                                profile["items"].append(item)
+                                profile["avatar"][info["pos"]] = info["emoji"]
+                                profile["xp"] += info["xp"]
+                                save_event(profile, f"Gekocht {item}")
+                                autosave()
+                                st.success(f"{item} gekocht!")
                             else:
                                 st.error("Niet genoeg geld")
 
-# ---------- Tab: Rank & History ----------
+# -----------------------
+# Tab: Rank & History
+# -----------------------
 with tab_rank:
     st.header("Rang & Historie")
-    if st.session_state["current_profile"] is None:
-        st.info("Selecteer eerst een profiel.")
+    if not st.session_state["logged_in"]:
+        st.info("Log in of maak een account.")
     else:
-        p = st.session_state["profiles"][st.session_state["current_profile"]]
-        st.subheader(f"{p['name']} — {get_rank(p['xp'])} — Level {p['level']}")
-        st.markdown(f"<div style='font-size:64px; white-space:pre'>{render_avatar(p)}</div>", unsafe_allow_html=True)
-        st.write(f"Geld: €{p['money']}  |  XP: {p['xp']}")
-        st.markdown("### Historie (laatste 30)")
-        for ev in list(reversed(p.get("history", [])))[:30]:
+        profile = st.session_state["profiles"][st.session_state["username"]]
+        st.subheader(f"{profile['name']} — {get_rank(profile['xp'])} — Level {profile['level']}")
+        st.markdown(f"<div style='font-size:72px; white-space:pre'>{render_avatar(profile)}</div>", unsafe_allow_html=True)
+        st.write(f"Stad: {profile.get('city','-')} | Geld: €{profile['money']} | XP: {profile['xp']}")
+        st.markdown("### Laatste acties (laatste 30)")
+        for ev in list(reversed(profile.get("history", [])))[:30]:
             st.write(f"{ev['time']} — {ev['text']}")
 
-# ---------- final save ----------
+# Final save
 autosave()
