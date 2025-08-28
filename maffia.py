@@ -68,9 +68,9 @@ def new_profile(name):
     return {
         "name": name,
         "created": datetime.now().isoformat(timespec="seconds"),
-        "money": 1200000000000000000000,
-        "xp": 99999999999999999999999999990,
-        "level": 9999999999999999999999999,
+        "money": 120,
+        "xp": 0,
+        "level": 1,
         "items": [],
         "avatar": {"base": random.choice(BASE_AVATARS), "top":"", "eyes":"", "neck":"", "torso":"", "feet":"", "side":""},
         "history": [],
