@@ -88,7 +88,7 @@ def get_rank(xp):
     if xp >= 701: return "Consigliere"
     if xp >= 301: return "Capo"
     if xp >= 101: return "Soldato"
-    if xp >= 50: return "Max de hond"
+    if xp >= 50: return "Tip de mogool"
     return "Rekruut"
 
 def render_avatar(profile):
