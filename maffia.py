@@ -68,9 +68,9 @@ def new_profile(name):
     return {
         "name": name,
         "created": datetime.now().isoformat(timespec="seconds"),
-        "money": 110000000,
-        "xp": 110000000,
-        "level": 100000,
+        "money": 120,
+        "xp": 0,
+        "level": 1,
         "items": [],
         "avatar": {"base": random.choice(BASE_AVATARS), "top":"", "eyes":"", "neck":"", "torso":"", "feet":"", "side":""},
         "history": [],
@@ -88,6 +88,7 @@ def get_rank(xp):
     if xp >= 701: return "Consigliere"
     if xp >= 301: return "Capo"
     if xp >= 101: return "Soldato"
+    if xp >= 50: return "Max de hond"
     return "Rekruut"
 
 def render_avatar(profile):
