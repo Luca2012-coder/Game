@@ -37,15 +37,32 @@ SHOP_ITEMS = {
 }
 
 # Levels per your spec (1..8 fixed). 9 & 10 assigned by leaderboard
-LEVEL_THRESHOLDS = [
-    (0, 100, "Groentje"),        # Level 1
-    (100, 200, "Rekruut"),      # Level 2
-    (200, 400, "Piccioto"),     # Level 3
-    (400, 800, "Soldato"),      # Level 4
-    (800, 1600, "Capodecino"),  # Level 5
-    (1600, 3200, "Capo"),       # Level 6
-    (3200, 6400, "Don"),        # Level 7
-    (6400, 12800, "Consiglieri")# Level 8
+RANKS = [
+
+    (0, "Groentje"),
+
+    (100, "Rekruut"),
+
+    (200, "Piccioto"),
+
+    (400, "Soldato"),
+
+    (800, "Capodecino"),
+
+    (1600, "Capo Bastone"),
+
+    (3200, "Capo"),
+
+    (6400, "Consigliere"),
+
+    (12800, "Ambasciatore della Famiglia"),
+
+    (25600, "Don"),
+
+    (51200, "Capo di Capo"),
+
+    (102400, "Lid van de Maffia Commiccie"),
+
 ]
 
 # -----------------------
@@ -300,67 +317,82 @@ with tab_jobs:
         job = st.selectbox("Kies baan", ["Pizzabakker","Chauffeur","Clubeigenaar","Corrupte Politie (parodie)","Sollicitatieafnemer"])
         st.markdown("---")
 
-        # ---------- Pizzabakker ----------
-        if job == "Pizzabakker":
-            st.subheader("🍕 Pizzabakker — maak en verkoop pizza's")
-            st.write("Je krijgt bestellingen. Kies de juiste ingrediënten. Meer correcte ingrediënten → hogere beloning.")
-            # available pizzas
-            PIZZAS = {
-                "Margherita": {"need": {"Tomaat","Mozzarella","Basilicum"}, "opts": {"Olijfolie"}},
-                "Pepperoni": {"need": {"Tomaat","Mozzarella","Pepperoni"}, "opts": {"Olijfolie","Oregano"}},
-                "Quattro Formaggi": {"need": {"Mozzarella","Gorgonzola","Parmezaan","Fontina"}, "opts": set()},
-                "Vegetariana": {"need": {"Tomaat","Mozzarella","Paprika","Champignons","Ui"}, "opts": {"Rucola"}}
-            }
-            pantry = sorted(list(set().union(*[v["need"]|v["opts"] for v in PIZZAS.values()]) | {"Ananas","Tonijn","Olijven","Chili-olie"}))
-            # create order(s)
-            orders_count = st.number_input("Aantal bestellingen (1-4)", min_value=1, max_value=4, value=1)
-            order_choices = st.multiselect("Kies welke pizza's besteld worden (random selectie als je niets kiest)", list(PIZZAS.keys()), default=None)
-            if not order_choices:
-                # generate random
-                order_choices = random.choices(list(PIZZAS.keys()), k=orders_count)
-            else:
-                # respect count
-                order_choices = (order_choices * ((orders_count//len(order_choices))+1))[:orders_count]
-            st.write("Bestellingen:", ", ".join(order_choices))
-            # UI for ingredient selection per order
-            results = {}
-            for i, pizza in enumerate(order_choices, start=1):
-                st.markdown(f"**Bestelling {i}: {pizza}**")
-                chosen = st.multiselect(f"Ingrediënten voor {pizza}", options=pantry, key=f"pz_{i}")
-                results[pizza + f"#{i}"] = set(chosen)
-            if st.button("Bak en verkoop"):
-                total_correct = 0
-                total_wrong = 0
-                total_need = 0
-                for key, chosen in results.items():
-                    pizza_name = key.split("#")[0]
-                    spec = PIZZAS[pizza_name]
-                    need = spec["need"]
-                    correct = len(chosen & need)
-                    wrong = len(chosen - (need | spec["opts"]))
-                    total_correct += correct
-                    total_wrong += wrong
-                    total_need += len(need)
-                # scoring: correct vs wrong, penalties for extras
-                score = max(0, total_correct - total_wrong)
-                # reward scales with score but modestly (avoid too fast leveling)
-                money = score * 5
-                xp = score * 4
-                # small bonus if perfect all
-                if total_correct == total_need and total_wrong == 0:
-                    money += 10; xp += 6
-                if score == 0:
-                    st.error("Klanten boos: je hebt niks goed gedaan. Geen verkoop.")
-                    save_event(p, "Pizzabakker: gefaald (geen correcte ingrediënten)")
-                else:
-                    p["money"] += money
-                    p["xp"] += xp
-                    save_event(p, f"Pizzabakker: score {score} → +€{money}, +{xp} XP")
-                    st.success(f"Verkocht! +€{money}, +{xp} XP (score {score})")
-                autosave()
+if job == "Pizzabakker":
+    st.subheader("🍕 Pizzabakker — maak en verkoop pizza's")
+    st.write("Je krijgt bestellingen. Kies de juiste ingrediënten. Meer correcte ingrediënten → hogere beloning.")
+
+    # beschikbare pizza's
+    PIZZAS = {
+        "Margherita": {"need": {"Tomaat","Mozzarella","Basilicum"}, "opts": {"Olijfolie"}},
+        "Pepperoni": {"need": {"Tomaat","Mozzarella","Pepperoni"}, "opts": {"Olijfolie","Oregano"}},
+        "Quattro Formaggi": {"need": {"Mozzarella","Gorgonzola","Parmezaan","Fontina"}, "opts": set()},
+        "Vegetariana": {"need": {"Tomaat","Mozzarella","Paprika","Champignons","Ui"}, "opts": {"Rucola"}}
+    }
+
+    # voorraad ingrediënten
+    pantry = sorted(list(set().union(*[v["need"]|v["opts"] for v in PIZZAS.values()]) | {"Ananas","Tonijn","Olijven","Chili-olie"}))
+
+    # aantal bestellingen kiezen
+    orders_count = st.number_input("Aantal bestellingen (1-4)", min_value=1, max_value=4, value=1)
+    order_choices = st.multiselect("Kies pizza's voor de bestelling (laat leeg voor random selectie)", list(PIZZAS.keys()), default=None)
+    if not order_choices:
+        order_choices = random.choices(list(PIZZAS.keys()), k=orders_count)
+    else:
+        order_choices = (order_choices * ((orders_count//len(order_choices))+1))[:orders_count]
+
+    st.write("Bestellingen:", ", ".join(order_choices))
+
+    results = {}
+    total_correct = 0
+    total_wrong = 0
+    total_need = 0
+
+    for i, pizza in enumerate(order_choices, start=1):
+        st.markdown(f"**Bestelling {i}: {pizza}**")
+        chosen = st.multiselect(f"Ingrediënten voor {pizza}", options=pantry, key=f"pz_{i}")
+
+        # --- speciale ananas-check ---
+        if "Ananas" in chosen:
+            st.error("Maledetto idiota, una vergogna per la famiglia.\nMuori il giorno nafg en ti becchi una pallottola.")
+            p["xp"] = max(0, p["xp"] - 50)
+            p["money"] = max(0, p["money"] - 20)
+            save_event(p, f"Pizzabakker: Ananas gebruikt → straf XP & geld")
+            continue  # sla deze pizza over
+
+        results[pizza + f"#{i}"] = set(chosen)
+
+    if st.button("Bak en verkoop"):
+        for key, chosen in results.items():
+            pizza_name = key.split("#")[0]
+            spec = PIZZAS[pizza_name]
+            need = spec["need"]
+            correct = len(chosen & need)
+            wrong = len(chosen - (need | spec["opts"]))
+            total_correct += correct
+            total_wrong += wrong
+            total_need += len(need)
+
+        score = max(0, total_correct - total_wrong)
+        money = score * 5
+        xp = score * 4
+        if total_correct == total_need and total_wrong == 0:
+            money += 10
+            xp += 6
+
+        if score == 0:
+            st.error("Klanten boos: je hebt niks goed gedaan. Geen verkoop.")
+            save_event(p, "Pizzabakker: gefaald (geen correcte ingrediënten)")
+        else:
+            p["money"] += money
+            p["xp"] += xp
+            save_event(p, f"Pizzabakker: score {score} → +€{money}, +{xp} XP")
+            st.success(f"Verkocht! +€{money}, +{xp} XP (score {score})")
+
+        autosave()
+
 
         # ---------- Chauffeur ----------
-        elif job == "Chauffeur":
+    elif job == "Chauffeur":
             st.subheader("🚗 Chauffeur — route- & timing keuze (strategie)")
             st.write("Kies een route; elke route heeft risico (files, controles). Kies slim.")
             routes = [
@@ -399,7 +431,7 @@ with tab_jobs:
                 autosave()
 
         # ---------- Clubeigenaar ----------
-        elif job == "Clubeigenaar":
+    elif job == "Clubeigenaar":
             st.subheader("🍸 Clubeigenaar — mixen en management (timed/turn-based)")
             st.write("Je ontvangt bestellingen (drinks). Kies de juiste combinatie per bestelling. Meer goede mixen → hogere omzet.")
             # recipes
@@ -439,7 +471,7 @@ with tab_jobs:
                 autosave()
 
         # ---------- Corrupte Politie (parodie puzzle) ----------
-        elif job == "Corrupte Politie (parodie)":
+    elif job == "Corrupte Politie (parodie)":
             st.subheader("🗂️ Corrupte Politie (parodie) — onderhandelingspuzzel")
             st.write("Dit is een fictieve puzzel: kies een 'omkoopbedrag' netjes binnen een redelijke marge. Te laag = geweigerd, te hoog = verlies.")
             base_value = random.randint(40,160)
@@ -471,7 +503,7 @@ with tab_jobs:
                 autosave()
 
         # ---------- Sollicitatieafnemer ----------
-        elif job == "Sollicitatieafnemer":
+    elif job == "Sollicitatieafnemer":
             st.subheader("📋 Sollicitatieafnemer — beoordeel kandidaten")
             st.write("Je krijgt 3 korte profielen. Kies wie je aanneemt. Goede keuze → XP; foute keuze → mogelijk verlies (reputatie).")
             # generate 3 candidate cards with hints (skill tags)
@@ -512,7 +544,7 @@ with tab_jobs:
                 autosave()
 
         # update level from rank map
-        update_profile_level(p, rank_map)
+    update_profile_level(p, rank_map)
 
 # -----------------------
 # Daily mission (random mini-game, 1x/day)
@@ -636,6 +668,24 @@ with tab_shop:
                                 autosave(); st.success(f"{item} gekocht!")
                             else:
                                 st.error("Niet genoeg geld")
+
+def update_special_ranks(profiles):
+    # Sorteer alle spelers op XP, van hoog naar laag
+    sorted_profiles = sorted(profiles, key=lambda x: x["xp"], reverse=True)
+
+    # Reset ieders speciale rang
+    for p in sorted_profiles:
+        p["special_rank"] = None
+
+    # Capo di Tutti Capi = speler met de meeste XP
+    if len(sorted_profiles) > 0:
+        sorted_profiles[0]["special_rank"] = "Capo di Tutti Capi"
+
+    # Sottocapo = speler met de op één na meeste XP
+    if len(sorted_profiles) > 1:
+        sorted_profiles[1]["special_rank"] = "Sottocapo"
+
+    return profiles
 
 # -----------------------
 # LEADERBOARD / ALL ACCOUNTS
