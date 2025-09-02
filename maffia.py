@@ -1,10 +1,11 @@
-# la_famiglia_full_jobs.py
-# Full Streamlit parody game: secure accounts, extended application, cities,
-# avatar/shop, and five jobs (minigames) to earn money & XP — no click-for-cash.
+# la_famiglia_jobs_game.py
+# Streamlit parody game: secure accounts, expanded application with acceptance,
+# cities, jobs with mini-games (Pizzabakker/Clubeigenaar/Chauffeur/Corrupte Politie),
+# persistent storage, leaderboard, and custom rank system with unique Level 9/10.
 #
 # Run:
 #   pip install streamlit
-#   streamlit run la_famiglia_full_jobs.py
+#   streamlit run la_famiglia_jobs_game.py
 
 import streamlit as st
 import json
@@ -14,9 +15,9 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 # -----------------------
-# Config
+# App config
 # -----------------------
-st.set_page_config(page_title="La Famiglia — Jobs & Minigames", page_icon="🍕", layout="wide")
+st.set_page_config(page_title="La Famiglia — Jobs & Ranks", page_icon="🍕", layout="wide")
 DATA_FILE = Path("profiles.json")
 
 CITIES = [
@@ -26,26 +27,26 @@ CITIES = [
 ]
 
 BASE_AVATARS = ["😎", "🕵️", "👨‍🍳", "🧑‍💼", "🧑‍🏭", "👴", "👩‍🦳"]
-
 SHOP_ITEMS = {
-    "Fedora": {"price": 400, "emoji": "🎩", "pos": "top", "xp": 30},
-    "Sunglasses": {"price": 420, "emoji": "🕶️", "pos": "eyes", "xp": 35},
-    "Gold Chain": {"price": 800, "emoji": "📿", "pos": "neck", "xp": 60},
-    "Fancy Suit": {"price": 1600, "emoji": "🤵", "pos": "torso", "xp": 120},
-    "Black Boots": {"price": 520, "emoji": "👞", "pos": "feet", "xp": 36},
-    "Motorcycle": {"price": 3000, "emoji": "🏍️", "pos": "side", "xp": 200},
+    "Fedora": {"price": 300, "emoji": "🎩", "pos": "top", "xp": 18},
+    "Sunglasses": {"price": 350, "emoji": "🕶️", "pos": "eyes", "xp": 22},
+    "Gold Chain": {"price": 600, "emoji": "📿", "pos": "neck", "xp": 44},
+    "Fancy Suit": {"price": 1200, "emoji": "🤵", "pos": "torso", "xp": 90},
+    "Black Boots": {"price": 420, "emoji": "👞", "pos": "feet", "xp": 24},
+    "Motorcycle": {"price": 2200, "emoji": "🏍️", "pos": "side", "xp": 150},
 }
 
-# Levels per your spec (1..8 fixed). 9 & 10 assigned by leaderboard
-LEVEL_THRESHOLDS = [
-    (0, 100, "Groentje"),        # Level 1
-    (100, 200, "Rekruut"),      # Level 2
-    (200, 400, "Piccioto"),     # Level 3
-    (400, 800, "Soldato"),      # Level 4
-    (800, 1600, "Capodecino"),  # Level 5
-    (1600, 3200, "Capo"),       # Level 6
-    (3200, 6400, "Don"),        # Level 7
-    (6400, 12800, "Consiglieri")# Level 8
+# Rank thresholds (Levels 1–8 are fixed; 9–10 are assigned by leaderboard)
+LEVELS = [
+    (0, 100, "Groentje"),            # Level 1
+    (100, 200, "Rekruut"),           # Level 2
+    (200, 400, "Piccioto"),          # Level 3
+    (400, 800, "Soldato"),           # Level 4
+    (800, 1600, "Capodecino"),       # Level 5
+    (1600, 3200, "Capo"),            # Level 6
+    (3200, 6400, "Don"),             # Level 7
+    (6400, 12800, "Consiglieri"),    # Level 8
+    # Level 9 & 10 below via leaderboard
 ]
 
 # -----------------------
@@ -57,6 +58,7 @@ def load_profiles():
             with DATA_FILE.open("r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
+            # backup corrupt file
             backup = DATA_FILE.with_suffix(".broken.json")
             DATA_FILE.replace(backup)
             return {}
@@ -67,13 +69,13 @@ def save_profiles(profiles):
         with DATA_FILE.open("w", encoding="utf-8") as f:
             json.dump(profiles, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        st.error(f"Kon profielen niet opslaan: {e}")
+        st.error(f"Opslaan mislukt: {e}")
 
 def autosave():
     save_profiles(st.session_state["profiles"])
 
 # -----------------------
-# Security helpers (simple hashed passwords)
+# Security helpers
 # -----------------------
 def make_salt(name: str) -> str:
     return hashlib.sha256(("salt:" + name).encode("utf-8")).hexdigest()[:16]
@@ -83,14 +85,15 @@ def hash_password(password: str, salt: str) -> str:
 
 def verify_login(profiles, name, password):
     prof = profiles.get(name)
-    if not prof: return False
+    if not prof:
+        return False
     salt = prof.get("salt", make_salt(name))
     return prof.get("password_hash") == hash_password(password, salt)
 
 # -----------------------
 # Model helpers
 # -----------------------
-def new_profile_struct(name, password, city, age, bio, specialities):
+def new_profile_struct(name, password, city, age, bio, motivations, strengths, references):
     salt = make_salt(name)
     return {
         "name": name,
@@ -99,11 +102,17 @@ def new_profile_struct(name, password, city, age, bio, specialities):
         "city": city,
         "age": age,
         "bio": bio,
-        "specialities": specialities,
+        "motivations": motivations,
+        "strengths": strengths,
+        "references": references,
         "created": datetime.now().isoformat(timespec="seconds"),
+
+        # Application gate
         "admitted": False,
         "last_application_dt": None,
-        "money": 80,  # small start
+
+        # Progression
+        "money": 80,   # heel bescheiden start
         "xp": 0,
         "level": 1,
         "items": [],
@@ -113,135 +122,10 @@ def new_profile_struct(name, password, city, age, bio, specialities):
     }
 
 def save_event(profile, text):
-    profile.setdefault("history", []).append({"time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "text": text})
-    autosave()
+    profile.setdefault("history", []).append(
+        {"time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "text": text}
+    )
 
-# -----------------------
-# Ranking logic including unique top 2
-# -----------------------
-def compute_base_level(xp):
-    for i, (lo, hi, title) in enumerate(LEVEL_THRESHOLDS, start=1):
-        if lo <= xp < hi:
-            return i, title
-    return len(LEVEL_THRESHOLDS), LEVEL_THRESHOLDS[-1][2]
-
-def assign_dynamic_ranks(profiles):
-    # return dict name->(level,title) with top1=Capo di Tutti Capi, top2=Sottocapo
-    items = list(profiles.values())
-    # sort by xp desc then created asc
-    items.sort(key=lambda p: (-p.get("xp",0), p.get("created","")))
-    rank_map = {}
-    for p in items:
-        lvl, title = compute_base_level(p.get("xp",0))
-        rank_map[p["name"]] = [lvl, title]
-    if len(items) >= 1:
-        rank_map[items[0]["name"]] = [10, "Capo di Tutti Capi"]
-    if len(items) >= 2:
-        rank_map[items[1]["name"]] = [9, "Sottocapo"]
-    return rank_map
-
-def update_profile_level(profile, rank_map):
-    lvl, title = rank_map.get(profile["name"], compute_base_level(profile.get("xp",0)))
-    profile["level"] = lvl
-
-# -----------------------
-# Game: Jobs / Minigames
-# - Pizzabakker: order matching (skill) → reward scaled by accuracy
-# - Chauffeur: route choice + small randomness, skill via choosing best route
-# - Clubeigenaar: mixing orders quickly (turn-based choices)
-# - Corrupte Politie (parody): negotiation puzzle (choose bribe value in range)
-# - Sollicitatieafnemer: evaluate applicants (choose accept/reject based on clues)
-# -----------------------
-
-# Persistent state init
-if "profiles" not in st.session_state:
-    st.session_state["profiles"] = load_profiles()
-if "logged_in" not in st.session_state:
-    st.session_state["logged_in"] = False
-if "username" not in st.session_state:
-    st.session_state["username"] = None
-
-# -----------------------
-# Sidebar: Registration / Login with extended application
-# -----------------------
-st.sidebar.title("La Famiglia — Account")
-
-if not st.session_state["logged_in"]:
-    st.sidebar.subheader("Solliciteer / Maak account")
-    with st.sidebar.form("apply"):
-        uname = st.text_input("Gebruikersnaam")
-        pwd = st.text_input("Wachtwoord", type="password")
-        city = st.selectbox("Stad", CITIES)
-        age = st.number_input("Leeftijd", min_value=16, max_value=99, value=25)
-        bio = st.text_area("Korte bio")
-        specialities = st.multiselect("Specialiteiten", ["Pizzabakken","Chauffeur","Clubeigenaar","Corrupte Politie","Sollicitatieafnemer","Logistiek","Financieel inzicht"])
-        # Extended application fields (not quiz style)
-        employment_history = st.text_area("Werkervaring (korte omschrijving)")
-        references = st.text_input("Referenties (fictief ok)")
-        apply_submit = st.form_submit_button("Verstuur sollicitatie / maak account")
-    if apply_submit:
-        if not uname.strip() or not pwd:
-            st.sidebar.error("Naam en wachtwoord verplicht.")
-        elif uname in st.session_state["profiles"]:
-            st.sidebar.error("Gebruikersnaam bestaat al.")
-        else:
-            prof = new_profile_struct(uname.strip(), pwd, city, age, bio, specialities)
-            prof["employment_history"] = employment_history
-            prof["references"] = references
-            prof["last_application_dt"] = datetime.now().isoformat(timespec="seconds")
-            # Evaluate acceptance: not always accepted
-            score = 0
-            score += min(len(employment_history)//40, 4)
-            score += min(len(bio)//50, 3)
-            score += min(len(specialities), 3)
-            if references.strip(): score += 1
-            # city flavor
-            if city in ["Napels","Sicilië","Palermo"]: score += 1
-            roll = random.randint(0,6)
-            admitted = (score + roll) >= 5
-            prof["admitted"] = admitted
-            st.session_state["profiles"][uname.strip()] = prof
-            autosave()
-            if admitted:
-                st.sidebar.success("Sollicitatie geaccepteerd — log nu in.")
-            else:
-                st.sidebar.warning("Afgekeurd — probeer later opnieuw met verbeterde motivatie/ervaring.")
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("Login")
-    with st.sidebar.form("login"):
-        login_name = st.text_input("Naam", key="login_name")
-        login_pass = st.text_input("Wachtwoord", type="password", key="login_pass")
-        login_btn = st.form_submit_button("Login")
-    if login_btn:
-        if verify_login(st.session_state["profiles"], login_name.strip(), login_pass):
-            st.session_state["logged_in"] = True
-            st.session_state["username"] = login_name.strip()
-            st.sidebar.success("Ingelogd")
-        else:
-            st.sidebar.error("Login mislukt — controleer naam/wachtwoord.")
-else:
-    st.sidebar.markdown(f"**Ingelogd als:** {st.session_state['username']}")
-    if st.sidebar.button("Uitloggen"):
-        st.session_state["logged_in"] = False
-        st.session_state["username"] = None
-        st.sidebar.success("Uitgelogd")
-
-st.sidebar.markdown("---")
-st.sidebar.info("Wachtwoorden worden lokaal gehashed. Deel ze niet.")
-
-# recompute ranks
-rank_map = assign_dynamic_ranks(st.session_state["profiles"])
-
-# -----------------------
-# Main layout tabs
-# -----------------------
-tab_profile, tab_jobs, tab_daily, tab_shop, tab_board = st.tabs([
-    "📝 Profiel", "🧰 Banen", "🎯 Dagelijkse missie", "🛍️ Shop & Avatar", "🏆 Leaderboard"
-])
-
-# -----------------------
-# Helper: render avatar string
-# -----------------------
 def render_avatar(profile):
     a = profile["avatar"]
     lines = [
@@ -249,7 +133,7 @@ def render_avatar(profile):
         f"{a.get('base','😎')}{a.get('eyes','')}",
         a.get("neck",""),
         a.get("torso",""),
-        a.get("feet","")
+        a.get("feet",""),
     ]
     side = a.get("side","")
     avatar_str = "\n".join(lines)
@@ -257,8 +141,133 @@ def render_avatar(profile):
         avatar_str = avatar_str.replace("\n", f" {side}\n")
     return avatar_str
 
+# ----- Rank logic with unique Level 9 & 10 -----
+def compute_base_level_and_title(xp: int):
+    for i, (lo, hi, title) in enumerate(LEVELS, start=1):
+        if lo <= xp < hi:
+            return i, title
+    # >= LEVELS[-1][1] => Level 8 by default, title "Consiglieri"
+    return 8, "Consiglieri"
+
+def assign_dynamic_ranks(profiles_dict):
+    """Return mapping name -> (level, title) with unique Level 9 and 10."""
+    # Sort by XP desc, then by created (older first breaks ties consistently)
+    all_profiles = list(profiles_dict.values())
+    all_profiles.sort(key=lambda p: (-p.get("xp",0), p.get("created","")))
+    # Base rank first
+    rank_map = {}
+    for p in all_profiles:
+        lvl, title = compute_base_level_and_title(p.get("xp",0))
+        rank_map[p["name"]] = [lvl, title]
+    # Top 2 override (if there are at least 2 players)
+    if len(all_profiles) >= 1:
+        top = all_profiles[0]["name"]
+        rank_map[top] = [10, "Capo di Tutti Capi"]
+    if len(all_profiles) >= 2:
+        second = all_profiles[1]["name"]
+        rank_map[second] = [9, "Sottocapo"]
+    return rank_map
+
+def update_profile_level_title(profile, rank_map):
+    lvl, title = rank_map.get(profile["name"], compute_base_level_and_title(profile.get("xp",0)))
+    profile["level"] = lvl
+    # we show title dynamically in UI; no need to store permanent title
+
 # -----------------------
-# PROFILE TAB
+# Session init
+# -----------------------
+if "profiles" not in st.session_state:
+    st.session_state["profiles"] = load_profiles()
+
+if "logged_in" not in st.session_state:
+    st.session_state["logged_in"] = False
+if "username" not in st.session_state:
+    st.session_state["username"] = None
+
+# -----------------------
+# Sidebar: create + login
+# -----------------------
+st.sidebar.title("Account")
+if not st.session_state["logged_in"]:
+    st.sidebar.subheader("Sollicitatie (account aanmaken)")
+    with st.sidebar.form("create"):
+        new_name = st.text_input("Gebruikersnaam")
+        new_pass = st.text_input("Wachtwoord", type="password")
+        city = st.selectbox("Kies je stad", CITIES)
+        age = st.number_input("Leeftijd", min_value=16, max_value=99, value=22)
+        bio = st.text_area("Korte intro/bio")
+        motivations = st.text_area("Motivatie: waarom wil je erbij?")
+        strengths = st.text_area("Sterke punten / ervaring")
+        references = st.text_input("Referentie (naam/telefoon — fictief mag)")
+        submit = st.form_submit_button("Aanvragen")
+
+    if submit:
+        if not new_name.strip() or not new_pass:
+            st.sidebar.error("Naam en wachtwoord verplicht.")
+        elif new_name in st.session_state["profiles"]:
+            st.sidebar.error("Gebruikersnaam bestaat al.")
+        else:
+            prof = new_profile_struct(new_name.strip(), new_pass, city, age, bio, motivations, strengths, references)
+            # mark application time
+            prof["last_application_dt"] = datetime.now().isoformat(timespec="seconds")
+            # Evaluate admission (not always accepted) — score + randomness
+            score = 0
+            # longer motivations & strengths help
+            score += min(len(motivations.strip()) // 40, 5)
+            score += min(len(strengths.strip()) // 40, 5)
+            # references give small boost
+            if references.strip():
+                score += 1
+            # certain cities purely cosmetic but tiny flavor boost
+            if city in ["Napels","Sicilië","Palermo"]:
+                score += 1
+            # randomness
+            roll = random.randint(0, 6)
+            admitted = (score + roll) >= 5  # ~niet altijd toegelaten
+            prof["admitted"] = admitted
+            st.session_state["profiles"][new_name.strip()] = prof
+            autosave()
+            if admitted:
+                st.sidebar.success("Sollicitatie geaccepteerd! Log nu in hieronder.")
+            else:
+                st.sidebar.warning("Sollicitatie afgewezen. Probeer het opnieuw na 24 uur (verbeter je motivatie/sterke punten).")
+
+    st.sidebar.subheader("Inloggen")
+    with st.sidebar.form("login"):
+        login_name = st.text_input("Naam")
+        login_pass = st.text_input("Wachtwoord", type="password")
+        login = st.form_submit_button("Login")
+    if login:
+        if verify_login(st.session_state["profiles"], login_name.strip(), login_pass):
+            st.session_state["logged_in"] = True
+            st.session_state["username"] = login_name.strip()
+            st.sidebar.success("Ingelogd")
+        else:
+            st.sidebar.error("Login mislukt.")
+
+else:
+    st.sidebar.markdown(f"**Ingelogd als:** {st.session_state['username']}")
+    if st.sidebar.button("Uitloggen"):
+        st.session_state["logged_in"] = False
+        st.session_state["username"] = None
+
+st.sidebar.markdown("---")
+st.sidebar.info("Wachtwoorden worden lokaal gehashed. Deel je wachtwoord niet.")
+
+# -----------------------
+# Rank map for this render (for unique Level 9/10)
+# -----------------------
+rank_map = assign_dynamic_ranks(st.session_state["profiles"])
+
+# -----------------------
+# Tabs
+# -----------------------
+tab_profile, tab_jobs, tab_mission, tab_shop, tab_board = st.tabs([
+    "📝 Profiel", "🧰 Banen & Minigames", "🎯 Dagelijkse missie", "🛍️ Shop & Avatar", "🏆 Alle accounts"
+])
+
+# -----------------------
+# Profile tab
 # -----------------------
 with tab_profile:
     st.header("Mijn profiel")
@@ -266,7 +275,43 @@ with tab_profile:
         st.info("Log in of solliciteer via de zijbalk.")
     else:
         p = st.session_state["profiles"][st.session_state["username"]]
-        update_profile_level(p, rank_map)
+        # If not admitted, show re-apply gate with cooldown
+        if not p.get("admitted", False):
+            st.warning("Je sollicitatie is (nog) niet geaccepteerd. Je kunt (na 24 uur) opnieuw solliciteren met een verbeterde motivatie.")
+            last_dt = p.get("last_application_dt")
+            can_reapply = True
+            if last_dt:
+                last = datetime.fromisoformat(last_dt)
+                can_reapply = datetime.now() - last >= timedelta(hours=24)
+            with st.form("reapply"):
+                st.subheader("Heraanvraag")
+                motivations = st.text_area("Motivatie (uitgebreider is beter)")
+                strengths = st.text_area("Sterke punten (ervaring, vaardigheden)")
+                references = st.text_input("Referenties")
+                resubmit = st.form_submit_button("Dien opnieuw in")
+            if resubmit:
+                if not can_reapply:
+                    st.error("Je kunt pas na 24 uur opnieuw solliciteren.")
+                else:
+                    score = 0
+                    score += min(len(motivations.strip()) // 40, 5)
+                    score += min(len(strengths.strip()) // 40, 5)
+                    if references.strip(): score += 1
+                    roll = random.randint(0, 6)
+                    admitted = (score + roll) >= 5
+                    p["motivations"] = motivations
+                    p["strengths"] = strengths
+                    p["references"] = references
+                    p["last_application_dt"] = datetime.now().isoformat(timespec="seconds")
+                    p["admitted"] = admitted
+                    save_event(p, "Heraanvraag verstuurd (geaccepteerd)" if admitted else "Heraanvraag verstuurd (afgewezen)")
+                    autosave()
+                    if admitted:
+                        st.success("Gefeliciteerd! Je bent toegelaten.")
+                    else:
+                        st.warning("Helaas, nog niet toegelaten. Probeer later opnieuw.")
+        # Show profile card
+        update_profile_level_title(p, rank_map)
         col1, col2 = st.columns([1,2])
         with col1:
             st.markdown(f"<div style='font-size:96px; white-space:pre'>{render_avatar(p)}</div>", unsafe_allow_html=True)
@@ -274,350 +319,248 @@ with tab_profile:
             st.write("Geld: €", p.get("money",0))
             st.write("XP:", p.get("xp",0))
             st.write("Level:", p.get("level",1))
-            # dynamic title from rank_map
-            title = rank_map.get(p["name"], [None, None])[1]
-            st.write("Rang:", title)
+            st.write("Rang:", rank_map[p["name"]][1])
         with col2:
             st.subheader(p["name"])
             st.write("Bio:", p.get("bio",""))
-            st.write("Specialiteiten:", ", ".join(p.get("specialities",[])) or "-")
+            st.write("Motivatie:", p.get("motivations",""))
+            st.write("Sterke punten:", p.get("strengths",""))
+            st.write("Referenties:", p.get("references",""))
             st.markdown("### Laatste acties")
-            for ev in list(reversed(p.get("history", [])))[:20]:
+            for ev in list(reversed(p.get("history", [])))[:15]:
                 st.write(f"{ev['time']} — {ev['text']}")
 
 # -----------------------
-# JOBS TAB (all minigames)
+# Jobs tab (minigames)
 # -----------------------
 with tab_jobs:
-    st.header("Banen & Minigames — verdien door skill")
+    st.header("Banen & Minigames")
     if not st.session_state["logged_in"]:
-        st.info("Log in om banen te spelen.")
+        st.info("Log in om te spelen.")
     else:
         p = st.session_state["profiles"][st.session_state["username"]]
         if not p.get("admitted", False):
-            st.warning("Je bent nog niet toegelaten — rond je sollicitatie af of wacht op toelating.")
-        # show jobs selection
-        job = st.selectbox("Kies baan", ["Pizzabakker","Chauffeur","Clubeigenaar","Corrupte Politie (parodie)","Sollicitatieafnemer"])
-        st.markdown("---")
-
-        # ---------- Pizzabakker ----------
-        if job == "Pizzabakker":
-            st.subheader("🍕 Pizzabakker — maak en verkoop pizza's")
-            st.write("Je krijgt bestellingen. Kies de juiste ingrediënten. Meer correcte ingrediënten → hogere beloning.")
-            # available pizzas
-            PIZZAS = {
-                "Margherita": {"need": {"Tomaat","Mozzarella","Basilicum"}, "opts": {"Olijfolie"}},
-                "Pepperoni": {"need": {"Tomaat","Mozzarella","Pepperoni"}, "opts": {"Olijfolie","Oregano"}},
-                "Quattro Formaggi": {"need": {"Mozzarella","Gorgonzola","Parmezaan","Fontina"}, "opts": set()},
-                "Vegetariana": {"need": {"Tomaat","Mozzarella","Paprika","Champignons","Ui"}, "opts": {"Rucola"}}
+            st.warning("Je bent nog niet toegelaten. Rond je sollicitatie af op het profiel-tab.")
+        else:
+            # Pizzabakker minigame: ingredient matching
+            st.subheader("🍕 Pizzabakker — Ingrediëntenmatch")
+            st.caption("Koppel per pizza de juiste ingrediënten. Hoe meer juist, hoe meer beloning.")
+            pizzas = {
+                "Margherita": {"must": {"Tomaat","Mozzarella","Basilicum"}, "opts": {"Olijfolie"}},
+                "Marinara": {"must": {"Tomaat","Knoflook","Oregano"}, "opts": {"Olijfolie"}},
+                "Quattro Formaggi": {"must": {"Mozzarella","Gorgonzola","Parmezaan","Fontina"}, "opts": set()},
+                "Capricciosa": {"must": {"Tomaat","Mozzarella","Champignons","Artisjok","Ham","Olijven"}, "opts": set()},
+                "Diavola": {"must": {"Tomaat","Mozzarella","Pikante salami"}, "opts": {"Chili-olie"}},
             }
-            pantry = sorted(list(set().union(*[v["need"]|v["opts"] for v in PIZZAS.values()]) | {"Ananas","Tonijn","Olijven","Chili-olie"}))
-            # create order(s)
-            orders_count = st.number_input("Aantal bestellingen (1-4)", min_value=1, max_value=4, value=1)
-            order_choices = st.multiselect("Kies welke pizza's besteld worden (random selectie als je niets kiest)", list(PIZZAS.keys()), default=None)
-            if not order_choices:
-                # generate random
-                order_choices = random.choices(list(PIZZAS.keys()), k=orders_count)
-            else:
-                # respect count
-                order_choices = (order_choices * ((orders_count//len(order_choices))+1))[:orders_count]
-            st.write("Bestellingen:", ", ".join(order_choices))
-            # UI for ingredient selection per order
-            results = {}
-            for i, pizza in enumerate(order_choices, start=1):
-                st.markdown(f"**Bestelling {i}: {pizza}**")
-                chosen = st.multiselect(f"Ingrediënten voor {pizza}", options=pantry, key=f"pz_{i}")
-                results[pizza + f"#{i}"] = set(chosen)
-            if st.button("Bak en verkoop"):
-                total_correct = 0
-                total_wrong = 0
-                total_need = 0
-                for key, chosen in results.items():
-                    pizza_name = key.split("#")[0]
-                    spec = PIZZAS[pizza_name]
-                    need = spec["need"]
-                    correct = len(chosen & need)
-                    wrong = len(chosen - (need | spec["opts"]))
-                    total_correct += correct
-                    total_wrong += wrong
-                    total_need += len(need)
-                # scoring: correct vs wrong, penalties for extras
-                score = max(0, total_correct - total_wrong)
-                # reward scales with score but modestly (avoid too fast leveling)
-                money = score * 5
-                xp = score * 4
-                # small bonus if perfect all
-                if total_correct == total_need and total_wrong == 0:
-                    money += 10; xp += 6
-                if score == 0:
-                    st.error("Klanten boos: je hebt niks goed gedaan. Geen verkoop.")
-                    save_event(p, "Pizzabakker: gefaald (geen correcte ingrediënten)")
-                else:
-                    p["money"] += money
-                    p["xp"] += xp
-                    save_event(p, f"Pizzabakker: score {score} → +€{money}, +{xp} XP")
-                    st.success(f"Verkocht! +€{money}, +{xp} XP (score {score})")
+            pantry = sorted(list(set().union(*[v["must"]|v["opts"] for v in pizzas.values()]) |
+                                  {"Ui","Paprika","Ananas","Rucola"}))
+            cols = st.columns(2)
+            picks = {}
+            with cols[0]:
+                for name in list(pizzas.keys())[:3]:
+                    picks[name] = st.multiselect(f"{name}", options=pantry, key=f"pz_{name}")
+            with cols[1]:
+                for name in list(pizzas.keys())[3:]:
+                    picks[name] = st.multiselect(f"{name}", options=pantry, key=f"pz_{name}")
+
+            if st.button("🍕 Bak pizza's"):
+                correct = 0
+                total_must = sum(len(v["must"]) for v in pizzas.values())
+                penalties = 0
+                for name, v in pizzas.items():
+                    chosen = set(picks.get(name, []))
+                    correct += len(chosen & v["must"])
+                    penalties += len(chosen - (v["must"] | v["opts"]))
+                # score: correct must - wrong extras
+                score = max(0, correct - penalties)
+                # rewards modest to keep leveling slow
+                money = score * 3
+                xp = score * 2
+                p["money"] += money
+                p["xp"] += xp
+                save_event(p, f"Pizzabakker: score {score} (juist {correct}, fout {penalties}) → +€{money}, +{xp} XP")
+                st.success(f"Resultaat: score {score} → +€{money}, +{xp} XP")
                 autosave()
 
-        # ---------- Chauffeur ----------
-        elif job == "Chauffeur":
-            st.subheader("🚗 Chauffeur — route- & timing keuze (strategie)")
-            st.write("Kies een route; elke route heeft risico (files, controles). Kies slim.")
-            routes = [
-                {"name":"Langzaam maar veilig (lange afstand)", "dist": 24, "traffic":"laag", "risk":"laag"},
-                {"name":"Snel door centrum (korte afstand)", "dist": 10, "traffic":"hoog", "risk":"middel"},
-                {"name":"Snelle ringweg (omweg)", "dist": 16, "traffic":"middel", "risk":"laag-middel"},
-            ]
-            choice = st.selectbox("Kies route", [r["name"] for r in routes])
-            hurry = st.slider("Rij haastig? (meer snelheid = hoger risico)", 0, 2, 1)
-            if st.button("Begin rit"):
-                r = next(x for x in routes if x["name"] == choice)
-                rng = random.Random(f"{p['name']}-{datetime.now().isoformat()}")
-                base_time = r["dist"]
-                traffic_pen = {"laag": rng.randint(0,2), "middel": rng.randint(2,6), "hoog": rng.randint(5,12)}.get(r["traffic"], 4)
-                risk_factor = {"laag": 0.08, "laag-middel":0.15, "middel":0.25, "hoog":0.35}.get(r["risk"], 0.2)
-                # hurry decreases time but increases mishap chance
-                hurry_effect = (1 - 0.15*hurry)
-                mishap = rng.random() < (risk_factor + 0.07*hurry)
-                delay = int(base_time * (1 + traffic_pen/10) / hurry_effect)
-                if mishap:
-                    # mishap penalty: delay + possible fine
-                    fine = rng.randint(5, 25)
-                    p["money"] = max(0, p["money"] - fine)
-                    msg = f"Politiecontrole / probleem: boete €{fine}, vertraging {delay}min."
-                    p["xp"] += 2
-                    save_event(p, "Chauffeur: " + msg)
-                    st.warning(msg)
-                else:
-                    # good run
-                    payout = max(6, int(40 - delay)//3)
-                    xp = max(3, int(12 - delay//5))
-                    p["money"] += payout
-                    p["xp"] += xp
-                    save_event(p, f"Chauffeur: route {choice} → +€{payout}, +{xp} XP (vertraging {delay})")
-                    st.success(f"Rit geslaagd: +€{payout}, +{xp} XP (vertraging {delay}min)")
-                autosave()
+            st.markdown("---")
 
-        # ---------- Clubeigenaar ----------
-        elif job == "Clubeigenaar":
-            st.subheader("🍸 Clubeigenaar — mixen en management (timed/turn-based)")
-            st.write("Je ontvangt bestellingen (drinks). Kies de juiste combinatie per bestelling. Meer goede mixen → hogere omzet.")
-            # recipes
-            RECIPES = {
-                "Vodka-Cola": {"need":["Vodka","Cola"]},
-                "Mojito": {"need":["Rum","Lime","Mint","Soda"]},
-                "Negroni": {"need":["Gin","Vermouth","Campari"]},
-                "Spritz": {"need":["Prosecco","Aperol","Soda"]}
-            }
-            pantry = sorted(list(set().union(*[v["need"] for v in RECIPES.values()]) | {"Orange","Cherry","Ice"}))
-            orders = random.choices(list(RECIPES.keys()), k=3)
-            st.write("Bestellingen:", ", ".join(orders))
-            choices = {}
-            for i, ord_name in enumerate(orders, start=1):
-                choices[ord_name+f"#{i}"] = st.multiselect(f"{ord_name} (bestelling {i})", options=pantry, key=f"club_{i}")
-            if st.button("Serveer nacht"):
-                correct = 0; wrong = 0
-                for key, chosen in choices.items():
-                    name = key.split("#")[0]
-                    need = set(RECIPES[name]["need"])
-                    chosen_set = set(chosen)
-                    corr = len(chosen_set & need)
-                    bad = len(chosen_set - need)
-                    correct += corr
-                    wrong += bad
-                score = max(0, correct - wrong)
-                money = score * 6
-                xp = score * 3
-                if score == 0:
-                    st.error("Nacht flop: klanten ontevreden, geen inkomsten.")
-                    save_event(p, "Clubeigenaar: Nacht flop")
+            # Clubeigenaar minigame: budget allocation & events
+            st.subheader("🎧 Clubeigenaar — Nacht budgetteren")
+            st.caption("Verdeel je budget over Security / Bar / Muziek. Random events bepalen de nacht.")
+            budget = st.slider("Nachtbudget (€)", 50, 300, 120)
+            colA, colB, colC = st.columns(3)
+            with colA:
+                sec = st.number_input("Security (€)", 0, budget, 40)
+            with colB:
+                bar = st.number_input("Bar (€)", 0, budget - sec, 50)
+            with colC:
+                music = st.number_input("Muziek (€)", 0, budget - sec - bar, 30)
+            if st.button("🏁 Start clubnacht"):
+                if sec + bar + music > budget:
+                    st.error("Verdeling overschrijdt budget.")
                 else:
-                    p["money"] += money
+                    # outcomes: compute satisfaction and risk
+                    rng = random.Random(f"{p['name']}-{datetime.now().isoformat()}")
+                    crowd = rng.uniform(0.8, 1.2) * (music/30 + bar/50 + 0.5)
+                    safety = (sec/40) + rng.uniform(0.4, 1.0)
+                    sales = crowd * (bar/40 + rng.uniform(0.5, 1.5))
+                    incidents = 0 if safety > 1.2 else (1 if safety > 0.8 else 2)
+                    income = int( sales * 25 - incidents * 15 )
+                    xp = max(1, int(crowd*2 + (safety*1.5)))
+                    if incidents >= 2:
+                        income -= 10  # penalty
+                    # modest rewards
+                    income = max(-20, min(60, income))
+                    p["money"] += income
                     p["xp"] += xp
-                    save_event(p, f"Clubeigenaar: +€{money}, +{xp} XP (score {score})")
-                    st.success(f"Nacht afgerond: +€{money}, +{xp} XP (score {score})")
-                autosave()
-
-        # ---------- Corrupte Politie (parodie puzzle) ----------
-        elif job == "Corrupte Politie (parodie)":
-            st.subheader("🗂️ Corrupte Politie (parodie) — onderhandelingspuzzel")
-            st.write("Dit is een fictieve puzzel: kies een 'omkoopbedrag' netjes binnen een redelijke marge. Te laag = geweigerd, te hoog = verlies.")
-            base_value = random.randint(40,160)
-            st.write(f"Situatie-waarde (hint): tussen ~{int(base_value*0.6)} en {int(base_value*1.6)}")
-            bid = st.number_input("Bied (€)", min_value=0, max_value=1000, value=int(base_value))
-            if st.button("Onderhandel"):
-                rng = random.Random(f"{p['name']}-{datetime.now().isoformat()}")
-                acceptable_low = int(base_value * 0.7)
-                acceptable_high = int(base_value * 1.3)
-                if acceptable_low <= bid <= acceptable_high:
-                    # success, profit margin (you get a cut)
-                    cut = int(bid * 0.35)  # you keep a cut (fictional playful)
-                    xp = rng.randint(6, 16)
-                    p["money"] += cut
-                    p["xp"] += xp
-                    save_event(p, f"CorrPol: succesvolle onderhand: +€{cut}, +{xp} XP (bied {bid})")
-                    st.success(f"Onderhandeling geslaagd: je neemt €{cut} mee, +{xp} XP (fictie/puzzel).")
-                elif bid < acceptable_low:
-                    # refused; no reward, small xp
-                    p["xp"] += 1
-                    save_event(p, f"CorrPol: geweigerd (bied te laag: {bid})")
-                    st.warning("Weigering — bied te laag. Geen beloning.")
-                else:
-                    # bid too high: you lose money (overschot suspect)
-                    loss = min(p["money"], int((bid - acceptable_high) * 0.5))
-                    p["money"] -= loss
-                    save_event(p, f"CorrPol: teveel betaald - verlies €{loss} (bied {bid})")
-                    st.error(f"Je overbetaalde en verloor €{loss}.")
-                autosave()
-
-        # ---------- Sollicitatieafnemer ----------
-        elif job == "Sollicitatieafnemer":
-            st.subheader("📋 Sollicitatieafnemer — beoordeel kandidaten")
-            st.write("Je krijgt 3 korte profielen. Kies wie je aanneemt. Goede keuze → XP; foute keuze → mogelijk verlies (reputatie).")
-            # generate 3 candidate cards with hints (skill tags)
-            CAND_SKILLS = ["Pizzabakken","Chauffeur","Clubeigenaar","Corrupte Politie","PR","Logistiek","Financieel inzicht"]
-            candidates = []
-            rng = random.Random(f"cand-{p['name']}-{datetime.now().isoformat()}")
-            for i in range(3):
-                name = f"Pers_{rng.randint(100,999)}"
-                skills = rng.sample(CAND_SKILLS, k=rng.randint(1,3))
-                years = rng.randint(0,12)
-                cand = {"name": name, "skills": skills, "years": years}
-                candidates.append(cand)
-            picks = []
-            for i, cnd in enumerate(candidates, start=1):
-                st.markdown(f"**{cnd['name']}** — vaardigheden: {', '.join(cnd['skills'])} — {cnd['years']} jaar ervaring")
-                acc = st.checkbox(f"Aanstellen {cnd['name']}", key=f"app_{i}")
-                if acc:
-                    picks.append(cnd)
-            if st.button("Beoordeel en beslis"):
-                # scoring: prefer candidates who match job specialties of your profile
-                good = 0; bad = 0
-                for c in picks:
-                    match = len(set(c["skills"]) & set(p.get("specialities", [])))
-                    if match > 0 or c["years"] >= 3:
-                        good += 1
+                    save_event(p, f"Clubeigenaar: omzet {income}€, incidents {incidents}, xp +{xp}")
+                    if income >= 0:
+                        st.success(f"Nacht geslaagd: +€{income}, +{xp} XP (incidenten: {incidents})")
                     else:
-                        bad += 1
-                if good > bad:
-                    xp = good * 8
-                    p["xp"] += xp
-                    save_event(p, f"Sollicitatieafnemer: juiste keuze → +{xp} XP")
-                    st.success(f"Goede aanstellingen: +{xp} XP")
+                        st.warning(f"Mager: {income}€ (verlies), +{xp} XP (incidenten: {incidents})")
+                    autosave()
+
+            st.markdown("---")
+
+            # Chauffeur minigame: route choice
+            st.subheader("🚗 Chauffeur — Kies je route")
+            st.caption("Elke route heeft risico op files/controles. Kies slim.")
+            routes = [
+                {"name":"Langs de kust", "dist": 18, "traffic":"middel", "risk":"laag"},
+                {"name":"Door het centrum", "dist": 10, "traffic":"hoog", "risk":"middel"},
+                {"name":"Snelweg omweg", "dist": 24, "traffic":"laag", "risk":"middel-hoog"},
+            ]
+            route_names = [r["name"] for r in routes]
+            choice = st.radio("Route", route_names, index=0)
+            if st.button("🏁 Vertrek"):
+                r = next(x for x in routes if x["name"] == choice)
+                rng = random.Random(f"{p['name']}-{datetime.now().isoformat()}-route")
+                delay = 0
+                # traffic effect
+                delay += {"laag": rng.randint(0,3), "middel": rng.randint(2,7), "hoog": rng.randint(5,12)}.get(r["traffic"], 4)
+                # risk effect
+                mishap_roll = rng.random()
+                mishap = False
+                if r["risk"] == "middel-hoog":
+                    mishap = mishap_roll < 0.35
+                elif r["risk"] == "middel":
+                    mishap = mishap_roll < 0.22
                 else:
-                    loss = min(20, max(0, bad*8))
-                    p["money"] = max(0, p["money"] - loss)
-                    save_event(p, f"Sollicitatieafnemer: slechte keuze → verlies €{loss}")
-                    st.error(f"Slechte aanstellingen: je reputatie kost je €{loss} (fictief).")
+                    mishap = mishap_roll < 0.12
+                if mishap:
+                    delay += rng.randint(6,15)
+                time_score = max(0, int(40 - (r["dist"] + delay)))
+                money = max(-8, min(35, time_score // 2))
+                xp = max(1, min(16, 8 + (15 - delay)//3))
+                p["money"] += money
+                p["xp"] += xp
+                msg = f"Route '{r['name']}', vertraging {delay} min. Resultaat: €{money}, +{xp} XP."
+                save_event(p, "Chauffeur: " + msg)
+                st.success(msg if money>=0 else "Vertraging kost geld. " + msg)
                 autosave()
 
-        # update level from rank map
-        update_profile_level(p, rank_map)
+            st.markdown("---")
+
+            # Corrupte politie (parodie) — paperwork memory puzzle
+            st.subheader("🗂️ 'Corrupte' Politie — Papierwerkpuzzel (parodie)")
+            st.caption("Zoek de juiste formulierencombinatie. (Humoristisch/onschuldig, geen echte misdaad).")
+            forms = ["A38", "B12", "C07", "D99", "E21"]
+            rng_key = f"forms_{p['name']}"
+            if rng_key not in st.session_state:
+                st.session_state[rng_key] = random.sample(forms, 3)  # secret combo
+            secret = st.session_state[rng_key]
+            pick = st.multiselect("Kies 3 formulieren", options=forms, max_selections=3)
+            if st.button("🔍 Controleer formulieren"):
+                if len(pick) != 3:
+                    st.error("Kies precies 3 formulieren.")
+                else:
+                    correct = len(set(pick) & set(secret))
+                    money = correct * 4
+                    xp = 2 + correct
+                    # modest reward; if full match, reshuffle for next time
+                    if correct == 3:
+                        st.session_state[rng_key] = random.sample(forms, 3)
+                        money += 6; xp += 3
+                    p["money"] += money
+                    p["xp"] += xp
+                    save_event(p, f"Papierwerkpuzzel: {correct}/3 goed → +€{money}, +{xp} XP")
+                    st.success(f"{correct}/3 goed → +€{money}, +{xp} XP")
+                    autosave()
 
 # -----------------------
-# Daily mission (random mini-game, 1x/day)
+# Daily mission (simple, optional)
 # -----------------------
-with tab_daily:
+with tab_mission:
     st.header("Dagelijkse missie (1× per dag)")
     if not st.session_state["logged_in"]:
-        st.info("Log in om je dagelijkse missie te spelen.")
+        st.info("Log in om je dagelijkse missie te doen.")
     else:
         p = st.session_state["profiles"][st.session_state["username"]]
         today = date.today().isoformat()
         done = p.get("last_daily_dt") == today
-        st.write("Elke dag 1 missie: variërend van gok/quiz tot mini-puzzels. Oefenen mag, echte beloning maar 1x per dag.")
         if done:
-            st.info("Vandaag is al gedaan — oefenen is mogelijk maar levert weinig op.")
-        # deterministic choice per-profile-per-day
+            st.info("Je dagelijkse missie is vandaag al voltooid. Morgen weer! (Je kunt natuurlijk banen blijven doen.)")
+        # Simple deterministic daily challenge (no quiz style on application; daily mission is fine)
         rng = random.Random(p["name"] + today)
-        mission = rng.choice(["order_focus","timed_guess","combo_quiz"])
-        st.write("Missie:", mission.replace("_"," ").title())
-        if mission == "order_focus":
-            st.write("Je moet een sequence van 4 items in de juiste volgorde kiezen (memory-like).")
-            seq = rng.sample(["A","B","C","D","E","F"], 4)
-            # show sequence briefly (we simulate: user must type exact sequence)
-            st.write("Kijk goed naar de volgorde — onthoud deze:")
-            st.write(" ".join(seq))
-            guess = st.text_input("Typ de volgorde van letters (gescheiden met spaties)").strip().upper()
-            if st.button("Verstuur volgorde"):
-                if not done and guess == " ".join(seq):
-                    gain = rng.randint(18, 36); xp = rng.randint(9, 18)
-                    p["money"] += gain; p["xp"] += xp; p["last_daily_dt"] = today
-                    save_event(p, f"Dagmissie volgorde gelukt: +€{gain}, +{xp} XP")
-                    st.success(f"Goed onthouden! +€{gain}, +{xp} XP")
+        target = rng.randint(6, 15)
+        st.write(f"Vandaag: verzamel **exact {target} punten** door max 3 beurten te kiezen (opties 1/2/3/4 punten per beurt).")
+        if "daily_turns" not in st.session_state:
+            st.session_state["daily_turns"] = 3
+            st.session_state["daily_sum"] = 0
+        colx = st.columns(4)
+        moves = [1,2,3,4]
+        pressed = None
+        for i, c in enumerate(colx):
+            with c:
+                if st.button(f"+{moves[i]} punten", key=f"mv{i}"):
+                    pressed = moves[i]
+        if pressed is not None and not done:
+            st.session_state["daily_sum"] += pressed
+            st.session_state["daily_turns"] -= 1
+            st.write(f"Totaal: {st.session_state['daily_sum']} (beurten over: {st.session_state['daily_turns']})")
+            if st.session_state["daily_turns"] == 0:
+                # evaluate
+                if st.session_state["daily_sum"] == target:
+                    gain = rng.randint(18, 42)
+                    xp = rng.randint(10, 22)
+                    p["money"] += gain
+                    p["xp"] += xp
+                    p["last_daily_dt"] = today
+                    save_event(p, f"Dagmissie gelukt: +€{gain}, +{xp} XP")
+                    st.success(f"Gelukt! +€{gain}, +{xp} XP")
                 else:
-                    if not done:
-                        p["last_daily_dt"] = today
-                        p["money"] += 2; p["xp"] += 1
-                        save_event(p, "Dagmissie volgorde gemist: training +€2 +1 XP")
-                        st.info("Fout of oefenmodus: training reward +€2 +1XP")
-                    else:
-                        st.info("Training voltooid.")
-                autosave()
-        elif mission == "timed_guess":
-            st.write("Kies welke 'case' (1..3) volgens jouw gevoel winstgevend is. Kans en beloning variëren.")
-            opt = st.radio("Welke case kies je?", ["1","2","3"], index=0)
-            if st.button("Voer missie uit"):
-                if done:
-                    st.info("Training: kleine beloning of niets.")
-                    p["money"] += 2; p["xp"] += 1; save_event(p, "Dagmissie oefening (timed_guess)")
-                else:
-                    pick = rng.randint(1,3)
-                    if int(opt) == pick:
-                        gain = rng.randint(14, 38); xp = rng.randint(7, 16)
-                        p["money"] += gain; p["xp"] += xp; p["last_daily_dt"] = today
-                        save_event(p, f"Dagmissie case gewonnen: +€{gain}, +{xp} XP")
-                        st.success(f"Goed gekozen! +€{gain}, +{xp} XP")
-                    else:
-                        loss = rng.randint(6, 18)
-                        p["money"] = max(0, p["money"] - loss); p["last_daily_dt"] = today
-                        save_event(p, f"Dagmissie case verloren: -€{loss}")
-                        st.warning(f"Verloren: -€{loss}")
-                autosave()
-        elif mission == "combo_quiz":
-            st.write("Een korte kennisvraag — goed = beloning, fout = kleine straf.")
-            qs = [
-                ("Welke stad is beroemd om pizza?", ["Napels","Milaan","Rome"], "Napels"),
-                ("Wat hoort in Margherita?", ["Tomaat","Sushi","Banaan"], "Tomaat"),
-            ]
-            q, opts, ans = rng.choice(qs)
-            pick = st.radio(q, opts, key=f"dq_{p['name']}")
-            if st.button("Antwoord"):
-                if done:
-                    st.info("Training: geen echte beloning.")
-                    p["xp"] += 1; save_event(p, "Dagmissie oefening quiz")
-                else:
-                    if pick == ans:
-                        gain = rng.randint(12, 30); xp = rng.randint(6, 14)
-                        p["money"] += gain; p["xp"] += xp; p["last_daily_dt"] = today
-                        save_event(p, f"Dagmissie quiz goed: +€{gain}, +{xp} XP")
-                        st.success(f"Goed! +€{gain}, +{xp} XP")
-                    else:
-                        loss = rng.randint(5, 15)
-                        p["money"] = max(0, p["money"] - loss); p["last_daily_dt"] = today
-                        save_event(p, f"Dagmissie quiz fout: -€{loss}")
-                        st.error(f"Fout: -€{loss}")
+                    # small consolation
+                    p["money"] += 3
+                    p["xp"] += 1
+                    p["last_daily_dt"] = today
+                    save_event(p, f"Dagmissie gemist: +€3, +1 XP (totaal {st.session_state['daily_sum']} != {target})")
+                    st.info(f"Niet precies {target}. Je krijgt +€3 en +1 XP.")
+                # reset local state
+                st.session_state["daily_turns"] = 3
+                st.session_state["daily_sum"] = 0
                 autosave()
 
 # -----------------------
-# SHOP & AVATAR
+# Shop & Avatar
 # -----------------------
 with tab_shop:
     st.header("Shop & Avatar")
     if not st.session_state["logged_in"]:
-        st.info("Log in om te shoppen.")
+        st.info("Log in om de shop te gebruiken.")
     else:
         p = st.session_state["profiles"][st.session_state["username"]]
-        update_profile_level(p, rank_map)
+        update_profile_level_title(p, rank_map)
         c1, c2 = st.columns([1,2])
         with c1:
+            st.subheader("Avatar")
             st.markdown(f"<div style='font-size:96px; white-space:pre'>{render_avatar(p)}</div>", unsafe_allow_html=True)
             st.write("Geld: €", p.get("money",0))
             new_base = st.selectbox("Basis avatar", options=BASE_AVATARS, index=BASE_AVATARS.index(p["avatar"].get("base", BASE_AVATARS[0])))
             if st.button("Stel basis in"):
                 p["avatar"]["base"] = new_base
-                save_event(p, f"Basis avatar ingesteld op {new_base}")
-                autosave(); st.success("Basis avatar aangepast")
+                save_event(p, f"Basis avatar → {new_base}")
+                autosave()
+                st.success("Basis ingesteld.")
         with c2:
             st.subheader("Items te koop")
             for item, info in SHOP_ITEMS.items():
@@ -632,21 +575,22 @@ with tab_shop:
                                 p["items"].append(item)
                                 p["avatar"][info["pos"]] = info["emoji"]
                                 p["xp"] += info["xp"]
-                                save_event(p, f"Gekocht {item}")
-                                autosave(); st.success(f"{item} gekocht!")
+                                save_event(p, f"Kocht {item}")
+                                autosave()
+                                st.success(f"{item} gekocht!")
                             else:
                                 st.error("Niet genoeg geld")
 
 # -----------------------
-# LEADERBOARD / ALL ACCOUNTS
+# Leaderboard tab (all accounts)
 # -----------------------
 with tab_board:
-    st.header("Alle accounts & leaderboard")
+    st.header("Alle accounts & rangen")
     profiles = st.session_state["profiles"]
-    # build rows sorted by xp desc
+    # build table
     rows = []
     for name, prof in profiles.items():
-        lvl, title = rank_map.get(name, compute_base_level(prof.get("xp",0)))
+        lvl, title = rank_map[name]
         rows.append({
             "Naam": name,
             "Stad": prof.get("city","-"),
@@ -661,9 +605,6 @@ with tab_board:
     st.dataframe(rows, use_container_width=True)
 
 # -----------------------
-# Finalization
+# Finalize
 # -----------------------
-# always update dynamic ranks & persist
-for prof in st.session_state["profiles"].values():
-    update_profile_level(prof, rank_map)
 autosave()
