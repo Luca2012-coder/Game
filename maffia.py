@@ -27,7 +27,7 @@ from datetime import date, datetime
 from pathlib import Path
 
  
-
+profile["level"] = 1 + profile["xp"] // 200
 # -----------------------
 
 # Config
@@ -640,7 +640,6 @@ with tab_earn:
 
         # update level and save
 
-profile["level"] = 1 + profile["xp"] // 200
 
  
 
