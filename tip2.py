@@ -1,4 +1,5 @@
 import json
+from pygame import Rect
 
 WIDTH = 900
 HEIGHT = 550
