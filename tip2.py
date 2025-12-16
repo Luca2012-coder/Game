@@ -1,176 +1,125 @@
-import json
-from pygame import Rect
-
-WIDTH = 900
-HEIGHT = 550
+import streamlit as st
+import time
 
 # ================= STATS =================
-money = 0
-money_per_click = 1
-money_per_second = 0
-prestige = 0
+if "money" not in st.session_state:
+    st.session_state.money = 0
+if "money_per_click" not in st.session_state:
+    st.session_state.money_per_click = 1
+if "money_per_second" not in st.session_state:
+    st.session_state.money_per_second = 0
+if "prestige" not in st.session_state:
+    st.session_state.prestige = 0
+if "weapon_level" not in st.session_state:
+    st.session_state.weapon_level = 0
+if "bonus_cooldown" not in st.session_state:
+    st.session_state.bonus_cooldown = 0
+if "achievements" not in st.session_state:
+    st.session_state.achievements = {
+        "100 geld": False,
+        "1000 geld": False,
+        "10 per seconde": False
+    }
 
 # ================= WAPENS =================
-weapon_level = 0
 weapon_names = ["Abel's Punch", "Kartonnen Pistol", "Metaal Pistol", "Final Boss Debie"]
-weapon_colors = [(200, 200, 0), (150, 150, 150), (100, 100, 200), (255, 0, 0)]
-weapon_prices = [0, 100, 500, 500000]  # prijs per upgrade
-weapon_click_values = [1, 25, 50, 100000]  # geld per klik per wapen
-weapon_rect = Rect((WIDTH//2 - 50, HEIGHT//2 - 50), (100, 100))
-weapon_color = weapon_colors[weapon_level]
-weapon_name = weapon_names[weapon_level]
+weapon_click_values = [1, 25, 50, 100000]
+weapon_prices = [0, 100, 500, 500000]
 
-# ================= ANIMATIE =================
-click_timer = 0
+# ================= FUNCTIES =================
+def click_weapon():
+    st.session_state.money += st.session_state.money_per_click * (1 + st.session_state.prestige)
 
-# ================= BONUS =================
-bonus_timer = 0
+def buy_click_upgrade():
+    if st.session_state.money >= 10:
+        st.session_state.money -= 10
+        st.session_state.money_per_click += 1
 
-# ================= ACHIEVEMENTS =================
-achievements = {
-    "100 geld": False,
-    "1000 geld": False,
-    "10 per seconde": False
-}
+def buy_auto_upgrade():
+    if st.session_state.money >= 25:
+        st.session_state.money -= 25
+        st.session_state.money_per_second += 1
 
-# ================= SAVE =================
-def save_game():
-    data = {
-        "money": money,
-        "money_per_click": money_per_click,
-        "money_per_second": money_per_second,
-        "prestige": prestige,
-        "weapon_level": weapon_level,
-        "achievements": achievements
-    }
-    with open("save.json", "w") as f:
-        json.dump(data, f)
+def buy_weapon():
+    lvl = st.session_state.weapon_level + 1
+    if lvl < len(weapon_names) and st.session_state.money >= weapon_prices[lvl]:
+        st.session_state.money -= weapon_prices[lvl]
+        st.session_state.weapon_level = lvl
+        st.session_state.money_per_click = weapon_click_values[lvl]
 
-def load_game():
-    global money, money_per_click, money_per_second, prestige, weapon_level, achievements, weapon_color, weapon_name
-    try:
-        with open("save.json") as f:
-            data = json.load(f)
-            money = data["money"]
-            money_per_click = data["money_per_click"]
-            money_per_second = data["money_per_second"]
-            prestige = data["prestige"]
-            weapon_level = data["weapon_level"]
-            achievements = data["achievements"]
-            weapon_color = weapon_colors[weapon_level]
-            weapon_name = weapon_names[weapon_level]
-    except:
-        pass
+def bonus_money():
+    if st.session_state.bonus_cooldown <= 0:
+        st.session_state.money += 50 * (1 + st.session_state.prestige)
+        st.session_state.bonus_cooldown = 10  # cooldown in sec
 
-load_game()
+def do_prestige():
+    if st.session_state.money >= 1000:
+        st.session_state.prestige += 1
+        st.session_state.money = 0
+        st.session_state.money_per_click = 1
+        st.session_state.money_per_second = 0
+        st.session_state.weapon_level = 0
 
-# ================= GAME =================
-def draw():
-    screen.clear()
-    screen.fill((15, 15, 30))
+def update_achievements():
+    if st.session_state.money >= 100:
+        st.session_state.achievements["100 geld"] = True
+    if st.session_state.money >= 1000:
+        st.session_state.achievements["1000 geld"] = True
+    if st.session_state.money_per_second >= 10:
+        st.session_state.achievements["10 per seconde"] = True
 
-    # teken weapon
-    screen.draw.filled_rect(weapon_rect, weapon_color)
-    screen.draw.text(weapon_name, (weapon_rect.x+5, weapon_rect.y+35), color="black", fontsize=20)
+# ================= LAYOUT =================
+st.title("📦 Kartonnen Wapen Clicker")
 
-    # Stats
-    screen.draw.text(f"Geld: €{int(money)}", (20, 20), fontsize=40, color="yellow")
-    screen.draw.text(f"Klik: €{money_per_click}", (20, 70))
-    screen.draw.text(f"/sec: €{money_per_second}", (20, 100))
-    screen.draw.text(f"Prestige: x{1+prestige}", (20, 130), color="orange")
+# Toon geld en stats
+st.write(f"**Geld:** €{int(st.session_state.money)}")
+st.write(f"**Klik per klik:** €{st.session_state.money_per_click}")
+st.write(f"**Per seconde:** €{st.session_state.money_per_second}")
+st.write(f"**Prestige multiplier:** x{1 + st.session_state.prestige}")
+st.write(f"**Huidig wapen:** {weapon_names[st.session_state.weapon_level]}")
 
-    # Shop
-    screen.draw.text("SHOP", (650, 20), fontsize=40, color="cyan")
-    screen.draw.text(f"[1] Klik +1 (€10)", (600, 80))
-    screen.draw.text(f"[2] Auto +1/sec (€25)", (600, 110))
+# Klik weapon
+if st.button("Klik op Wapen!"):
+    click_weapon()
 
-    # Wapen upgrade
-    next_weapon_level = weapon_level + 1
-    if next_weapon_level < len(weapon_names):
-        screen.draw.text(
-            f"[3] Koop {weapon_names[next_weapon_level]} (€{weapon_prices[next_weapon_level]}, {weapon_click_values[next_weapon_level]} per klik)",
-            (600, 140)
-        )
+# Shop upgrades
+st.subheader("Shop")
+cols = st.columns(2)
 
-    # Bonus & Prestige
-    screen.draw.text("[B] Bonus geld", (600, 180))
-    screen.draw.text("[P] Prestige (geld reset)", (600, 210))
-    screen.draw.text("[S] Opslaan", (600, 240))
+with cols[0]:
+    if st.button("Klik upgrade (+1 per klik, €10)"):
+        buy_click_upgrade()
+with cols[1]:
+    if st.button("Auto geld (+1/sec, €25)"):
+        buy_auto_upgrade()
 
-    # Achievements
-    y = 300
-    screen.draw.text("Achievements:", (20, y))
-    for a in achievements:
-        status = "✔" if achievements[a] else "✖"
-        screen.draw.text(f"{status} {a}", (20, y+25))
-        y += 25
+# Weapon upgrade
+lvl = st.session_state.weapon_level + 1
+if lvl < len(weapon_names):
+    if st.button(f"Koop {weapon_names[lvl]} (€{weapon_prices[lvl]}, {weapon_click_values[lvl]} per klik)"):
+        buy_weapon()
 
-def on_mouse_down(pos):
-    global money, click_timer
-    if weapon_rect.collidepoint(pos):
-        money += money_per_click * (1 + prestige)
-        click_timer = 5
+# Bonus
+if st.button("Bonus geld (+50, 10s cooldown)"):
+    bonus_money()
 
-def on_key_down(key):
-    global money, money_per_click, money_per_second, weapon_level, weapon_color, weapon_name, bonus_timer, prestige
+# Prestige
+if st.button("Prestige (reset vanaf €1000)"):
+    do_prestige()
 
-    # Klik upgrade
-    if key == keys.K_1 and money >= 10:
-        money -= 10
-        money_per_click += 1
+# Achievements
+st.subheader("Achievements")
+for name, done in st.session_state.achievements.items():
+    st.write(f"{'✔' if done else '✖'} {name}")
 
-    # Auto upgrade
-    if key == keys.K_2 and money >= 25:
-        money -= 25
-        money_per_second += 1
+# ================= AUTO-GELD =================
+# update geld automatisch elke 0.1 sec
+def auto_increment():
+    st.session_state.money += st.session_state.money_per_second * (1 + st.session_state.prestige) * 0.1
+    if st.session_state.bonus_cooldown > 0:
+        st.session_state.bonus_cooldown -= 0.1
+    update_achievements()
 
-    # Wapen upgrade
-    if key == keys.K_3 and weapon_level < len(weapon_names)-1:
-        price = weapon_prices[weapon_level+1]
-        if money >= price:
-            money -= price
-            weapon_level += 1
-            money_per_click = weapon_click_values[weapon_level]
-            weapon_color = weapon_colors[weapon_level]
-            weapon_name = weapon_names[weapon_level]
-
-    # Bonus geld
-    if key == keys.B and bonus_timer <= 0:
-        money += 50 * (1 + prestige)
-        bonus_timer = 600  # 10 sec bij 60 fps
-
-    # Prestige
-    if key == keys.P and money >= 1000:
-        prestige += 1
-        money = 0
-        money_per_click = 1
-        money_per_second = 0
-        weapon_level = 0
-        weapon_color = weapon_colors[weapon_level]
-        weapon_name = weapon_names[weapon_level]
-
-    # Opslaan
-    if key == keys.S:
-        save_game()
-
-def update():
-    global money, click_timer, bonus_timer
-
-    # Auto geld
-    money += (money_per_second * (1 + prestige)) / 60
-
-    # Animatie terug
-    if click_timer > 0:
-        click_timer -= 1
-
-    # Bonus timer aftellen
-    if bonus_timer > 0:
-        bonus_timer -= 1
-
-    # Achievements
-    if money >= 100:
-        achievements["100 geld"] = True
-    if money >= 1000:
-        achievements["1000 geld"] = True
-    if money_per_second >= 10:
-        achievements["10 per seconde"] = True
+auto_increment()
+time.sleep(0.1)
+st.experimental_rerun()
