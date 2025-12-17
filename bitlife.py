@@ -8,6 +8,10 @@ geld = 1000
 geluk = 50
 gezondheid = 50
 
+# Willekeurige maximale leeftijd tussen 80 en 120
+max_leeftijd = random.randint(80, 120)
+print(f"Je zult waarschijnlijk rond de {max_leeftijd} jaar oud worden.")
+
 # Functie om keuzes te tonen en effect toe te passen
 def levenskeuze(leeftijd, geld, geluk, gezondheid):
     keuzes = [
@@ -45,7 +49,7 @@ def levenskeuze(leeftijd, geld, geluk, gezondheid):
         geluk -= 5
     elif keuze == 2:
         geluk += 5
-        geld += 100  # kleine bijbaan
+        geld += 100
     elif keuze == 3:
         gezondheid += 5
         geld -= 50
@@ -78,14 +82,30 @@ def levenskeuze(leeftijd, geld, geluk, gezondheid):
         geluk -= 5
         gezondheid -= 5
 
+    # Gezondheid max/min
+    gezondheid = max(0, min(gezondheid, 100))
+    geluk = max(0, min(geluk, 100))
     return geld, geluk, gezondheid
 
+# Functie voor creatieve dood
+def creatieve_dood(leeftijd):
+    doodsredenen = [
+        "Je bent vredig in je slaap overleden.",
+        "Je bent gevallen tijdens een epische danswedstrijd.",
+        "Je bent een beroemdheid geworden en overleefde je eigen filmset niet.",
+        "Je bent gestorven tijdens het redden van een kat uit een boom.",
+        "Je hart stopte na een te veel aan chocolade."
+    ]
+    if leeftijd < max_leeftijd:
+        print("\nOh nee! Je bent gestorven voordat je je maximale leeftijd bereikte!")
+    print(random.choice(doodsredenen))
+
 # Simulatie loop
-while leeftijd < 80 and gezondheid > 0:
+while leeftijd < max_leeftijd and gezondheid > 0:
     leeftijd += 1
     print(f"\n--- Leeftijd: {leeftijd} jaar ---")
     geld, geluk, gezondheid = levenskeuze(leeftijd, geld, geluk, gezondheid)
     print(f"Geld: {geld}, Geluk: {geluk}, Gezondheid: {gezondheid}")
 
-print("\nJe leven is voorbij!")
-print(f"Leeftijd: {leeftijd}, Geld: {geld}, Geluk: {geluk}, Gezondheid: {gezondheid}")
+creatieve_dood(leeftijd)
+print(f"\nLeeftijd bij overlijden: {leeftijd}, Geld: {geld}, Geluk: {geluk}, Gezondheid: {gezondheid}")
