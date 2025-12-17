@@ -3,7 +3,7 @@ import random
 
 st.set_page_config(page_title="Mini BitLife", page_icon="🧬")
 
-# Sessiestatus om levensloop bij te houden
+# Sessiestatus
 if 'leeftijd' not in st.session_state:
     st.session_state.leeftijd = 0
     st.session_state.geld = 1000
@@ -13,7 +13,13 @@ if 'leeftijd' not in st.session_state:
     st.session_state.maand = 1
     st.session_state.dood = False
 
-# Functie voor keuzes
+# Lijst keuzes
+keuzes = [
+    "Werken", "Studeren", "Sporten", "Feesten", "Vrijwilligerswerk", "Sparen",
+    "Riskante actie", "Relatie beginnen", "Gezond eten", "Huis kopen", "Reizen", "Niks doen"
+]
+
+# Functie voor keuze-effecten
 def levenskeuze(keuze_num):
     if keuze_num == 1:
         st.session_state.geld += 500
@@ -53,7 +59,7 @@ def levenskeuze(keuze_num):
         st.session_state.geluk -= 5
         st.session_state.gezondheid -= 5
 
-    # Grenzen controleren
+    # Grenzen
     st.session_state.gezondheid = max(0, min(100, st.session_state.gezondheid))
     st.session_state.geluk = max(0, min(100, st.session_state.geluk))
     st.session_state.geld = max(0, st.session_state.geld)
@@ -72,27 +78,22 @@ def creatieve_dood():
     st.write(random.choice(doods_scenario))
     st.write(f"**Eindstats:** Geld: {st.session_state.geld}, Geluk: {st.session_state.geluk}, Gezondheid: {st.session_state.gezondheid}")
 
-# Titel
+# Titel en stats
 st.title("🧬 Mini BitLife")
 st.write(f"Leeftijd: {st.session_state.leeftijd} | Geld: {st.session_state.geld} | Geluk: {st.session_state.geluk} | Gezondheid: {st.session_state.gezondheid}")
 st.write(f"Maand {st.session_state.maand} van jaar {st.session_state.leeftijd + 1}")
 
-# Keuzeknoppen
-keuzes = [
-    "Werken", "Studeren", "Sporten", "Feesten", "Vrijwilligerswerk", "Sparen",
-    "Riskante actie", "Relatie beginnen", "Gezond eten", "Huis kopen", "Reizen", "Niks doen"
-]
-
+# Als niet dood, toon keuzes
 if not st.session_state.dood:
-    for i, optie in enumerate(keuzes):
-        if st.button(optie, key=f"maand_{st.session_state.maand}_{i}"):
-            levenskeuze(i + 1)
-            st.session_state.maand += 1
+    keuze = st.radio("Kies je actie:", keuzes)
+    if st.button("Bevestig keuze"):
+        levenskeuze(keuzes.index(keuze) + 1)
+        st.session_state.maand += 1
+        if st.session_state.gezondheid <= 0 or st.session_state.leeftijd >= st.session_state.max_leeftijd:
+            creatieve_dood()
+        elif st.session_state.maand > 12:
+            st.session_state.maand = 1
+            st.session_state.leeftijd += 1
             if st.session_state.gezondheid <= 0 or st.session_state.leeftijd >= st.session_state.max_leeftijd:
                 creatieve_dood()
-            elif st.session_state.maand > 12:
-                st.session_state.maand = 1
-                st.session_state.leeftijd += 1
-                if st.session_state.gezondheid <= 0 or st.session_state.leeftijd >= st.session_state.max_leeftijd:
-                    creatieve_dood()
-            st.experimental_rerun()
+        st.experimental_rerun()
