@@ -1,94 +1,21 @@
+import streamlit as st
 import random
 
-# Start van het spel
-print("Welkom bij je levenssimulatie!")
-naam = input("Wat is je naam? ")
-leeftijd = 0
-geld = 1000
-geluk = 50
-gezondheid = 50
+# --- Start van het spel ---
+if 'leeftijd' not in st.session_state:
+    st.session_state.leeftijd = 0
+    st.session_state.geld = 1000
+    st.session_state.geluk = 50
+    st.session_state.gezondheid = 50
+    st.session_state.max_leeftijd = random.randint(80, 120)
+    st.session_state.spelen = True
+    st.session_state.dood = ""
 
-# Willekeurige maximale leeftijd tussen 80 en 120
-max_leeftijd = random.randint(80, 120)
-print(f"Je zult waarschijnlijk rond de {max_leeftijd} jaar oud worden.")
+st.title("BitLife Streamlit Edition")
+st.write(f"Je zult waarschijnlijk rond de {st.session_state.max_leeftijd} jaar oud worden.")
 
-# Functie om keuzes te tonen en effect toe te passen
-def levenskeuze(leeftijd, geld, geluk, gezondheid):
-    keuzes = [
-        "1. Werken (+geld, -geluk)",
-        "2. Studeren (+geluk, +kans op betere baan)",
-        "3. Sporten (+gezondheid, -geld)",
-        "4. Feesten (+geluk, -gezondheid)",
-        "5. Vrijwilligerswerk (+geluk, -geld)",
-        "6. Sparen (+geld, -geluk)",
-        "7. Riskante actie doen (+geld, kans op -gezondheid)",
-        "8. Relatie beginnen (+geluk, kans op -geld)",
-        "9. Gezond eten (+gezondheid, -geld)",
-        "10. Huis kopen (-geld, +geluk)",
-        "11. Reizen (-geld, +geluk)",
-        "12. Niks doen (-geluk, -gezondheid)"
-    ]
-
-    print("\nKies een actie voor dit jaar:")
-    for keuze in keuzes:
-        print(keuze)
-    
-    while True:
-        try:
-            keuze = int(input("Typ het nummer van je keuze (1-12): "))
-            if 1 <= keuze <= 12:
-                break
-            else:
-                print("Kies een nummer tussen 1 en 12.")
-        except:
-            print("Typ een geldig nummer.")
-    
-    # Effecten van keuzes
-    if keuze == 1:
-        geld += 500
-        geluk -= 5
-    elif keuze == 2:
-        geluk += 5
-        geld += 100
-    elif keuze == 3:
-        gezondheid += 5
-        geld -= 50
-    elif keuze == 4:
-        geluk += 10
-        gezondheid -= 5
-    elif keuze == 5:
-        geluk += 5
-        geld -= 100
-    elif keuze == 6:
-        geld += 200
-        geluk -= 5
-    elif keuze == 7:
-        winst = random.randint(-200, 1000)
-        geld += winst
-        gezondheid -= random.randint(0, 10)
-    elif keuze == 8:
-        geluk += 10
-        geld -= random.randint(0, 200)
-    elif keuze == 9:
-        gezondheid += 5
-        geld -= 50
-    elif keuze == 10:
-        geluk += 10
-        geld -= 500
-    elif keuze == 11:
-        geluk += 10
-        geld -= 300
-    elif keuze == 12:
-        geluk -= 5
-        gezondheid -= 5
-
-    # Gezondheid max/min
-    gezondheid = max(0, min(gezondheid, 100))
-    geluk = max(0, min(geluk, 100))
-    return geld, geluk, gezondheid
-
-# Functie voor creatieve dood
-def creatieve_dood(leeftijd):
+# --- Creatieve dood ---
+def creatieve_dood():
     doodsredenen = [
         "Je bent vredig in je slaap overleden.",
         "Je bent gevallen tijdens een epische danswedstrijd.",
@@ -96,16 +23,86 @@ def creatieve_dood(leeftijd):
         "Je bent gestorven tijdens het redden van een kat uit een boom.",
         "Je hart stopte na een te veel aan chocolade."
     ]
-    if leeftijd < max_leeftijd:
-        print("\nOh nee! Je bent gestorven voordat je je maximale leeftijd bereikte!")
-    print(random.choice(doodsredenen))
+    st.session_state.dood = random.choice(doodsredenen)
+    st.session_state.spelen = False
 
-# Simulatie loop
-while leeftijd < max_leeftijd and gezondheid > 0:
-    leeftijd += 1
-    print(f"\n--- Leeftijd: {leeftijd} jaar ---")
-    geld, geluk, gezondheid = levenskeuze(leeftijd, geld, geluk, gezondheid)
-    print(f"Geld: {geld}, Geluk: {geluk}, Gezondheid: {gezondheid}")
+# --- Levenskeuzes ---
+keuzes = [
+    "Werken (+geld, -geluk)",
+    "Studeren (+geluk, +kans op betere baan)",
+    "Sporten (+gezondheid, -geld)",
+    "Feesten (+geluk, -gezondheid)",
+    "Vrijwilligerswerk (+geluk, -geld)",
+    "Sparen (+geld, -geluk)",
+    "Riskante actie doen (+geld, kans op -gezondheid)",
+    "Relatie beginnen (+geluk, kans op -geld)",
+    "Gezond eten (+gezondheid, -geld)",
+    "Huis kopen (-geld, +geluk)",
+    "Reizen (-geld, +geluk)",
+    "Niks doen (-geluk, -gezondheid)"
+]
 
-creatieve_dood(leeftijd)
-print(f"\nLeeftijd bij overlijden: {leeftijd}, Geld: {geld}, Geluk: {geluk}, Gezondheid: {gezondheid}")
+def kies_actie(index):
+    if index == 0:
+        st.session_state.geld += 500
+        st.session_state.geluk -= 5
+    elif index == 1:
+        st.session_state.geluk += 5
+        st.session_state.geld += 100
+    elif index == 2:
+        st.session_state.gezondheid += 5
+        st.session_state.geld -= 50
+    elif index == 3:
+        st.session_state.geluk += 10
+        st.session_state.gezondheid -= 5
+    elif index == 4:
+        st.session_state.geluk += 5
+        st.session_state.geld -= 100
+    elif index == 5:
+        st.session_state.geld += 200
+        st.session_state.geluk -= 5
+    elif index == 6:
+        winst = random.randint(-200, 1000)
+        st.session_state.geld += winst
+        st.session_state.gezondheid -= random.randint(0, 10)
+    elif index == 7:
+        st.session_state.geluk += 10
+        st.session_state.geld -= random.randint(0, 200)
+    elif index == 8:
+        st.session_state.gezondheid += 5
+        st.session_state.geld -= 50
+    elif index == 9:
+        st.session_state.geluk += 10
+        st.session_state.geld -= 500
+    elif index == 10:
+        st.session_state.geluk += 10
+        st.session_state.geld -= 300
+    elif index == 11:
+        st.session_state.geluk -= 5
+        st.session_state.gezondheid -= 5
+
+    st.session_state.gezondheid = max(0, min(100, st.session_state.gezondheid))
+    st.session_state.geluk = max(0, min(100, st.session_state.geluk))
+    st.session_state.leeftijd += 1
+
+    if st.session_state.leeftijd >= st.session_state.max_leeftijd or st.session_state.gezondheid <= 0:
+        creatieve_dood()
+
+# --- Streamlit interface ---
+if st.session_state.spelen:
+    st.write(f"\n--- Leeftijd: {st.session_state.leeftijd} jaar ---")
+    st.write(f"Geld: {st.session_state.geld}, Geluk: {st.session_state.geluk}, Gezondheid: {st.session_state.gezondheid}")
+
+    for i, actie in enumerate(keuzes):
+        if st.button(actie, key=i):
+            kies_actie(i)
+else:
+    st.write("💀 Je leven is voorbij!")
+    st.write(st.session_state.dood)
+    st.write(f"Eindleeftijd: {st.session_state.leeftijd}, Geld: {st.session_state.geld}, Geluk: {st.session_state.geluk}, Gezondheid: {st.session_state.gezondheid}")
+
+# Optioneel: knop om opnieuw te spelen
+if st.button("Opnieuw spelen"):
+    for key in st.session_state.keys():
+        del st.session_state[key]
+    st.experimental_rerun()
