@@ -1,106 +1,91 @@
-import streamlit as st
 import random
 
-# --- Initialisatie van de speler ---
-if "player" not in st.session_state:
-    st.session_state.player = {
-        "naam": "",
-        "leeftijd": 0,
-        "geld": 1000,
-        "gezondheid": 100,
-        "geluk": 50,
-        "slimheid": 50,
-        "relaties": [],
-        "leven_actief": False
-    }
+# Start van het spel
+print("Welkom bij je levenssimulatie!")
+naam = input("Wat is je naam? ")
+leeftijd = 0
+geld = 1000
+geluk = 50
+gezondheid = 50
 
-# --- Functie om stats te tonen ---
-def toon_stats(speler):
-    st.subheader(f"Leeftijd: {speler['leeftijd']}")
-    st.progress(speler['gezondheid']/100)
-    st.write(f"Geld: ${speler['geld']}")
-    st.progress(speler['geluk']/100)
-    st.write(f"Geluk: {speler['geluk']}")
-    st.progress(speler['slimheid']/100)
-    st.write(f"Slimheid: {speler['slimheid']}")
-    st.write(f"Relaties: {', '.join(speler['relaties']) if speler['relaties'] else 'Geen'}")
+# Functie om keuzes te tonen en effect toe te passen
+def levenskeuze(leeftijd, geld, geluk, gezondheid):
+    keuzes = [
+        "1. Werken (+geld, -geluk)",
+        "2. Studeren (+geluk, +kans op betere baan)",
+        "3. Sporten (+gezondheid, -geld)",
+        "4. Feesten (+geluk, -gezondheid)",
+        "5. Vrijwilligerswerk (+geluk, -geld)",
+        "6. Sparen (+geld, -geluk)",
+        "7. Riskante actie doen (+geld, kans op -gezondheid)",
+        "8. Relatie beginnen (+geluk, kans op -geld)",
+        "9. Gezond eten (+gezondheid, -geld)",
+        "10. Huis kopen (-geld, +geluk)",
+        "11. Reizen (-geld, +geluk)",
+        "12. Niks doen (-geluk, -gezondheid)"
+    ]
 
-# --- Begin scherm ---
-st.title("BitLife-achtige Game in Streamlit")
-
-if not st.session_state.player["leven_actief"]:
-    naam = st.text_input("Wat is je naam?")
-    if st.button("Start leven") and naam:
-        st.session_state.player["naam"] = naam
-        st.session_state.player["leeftijd"] = 0
-        st.session_state.player["geld"] = 1000
-        st.session_state.player["gezondheid"] = 100
-        st.session_state.player["geluk"] = 50
-        st.session_state.player["slimheid"] = 50
-        st.session_state.player["relaties"] = []
-        st.session_state.player["leven_actief"] = True
-        st.experimental_rerun()
-
-# --- Spel logica ---
-if st.session_state.player["leven_actief"]:
-    speler = st.session_state.player
-    toon_stats(speler)
-
-    st.markdown("### Kies je actie voor dit jaar:")
-    actie = st.radio("", ["Studeren", "Werken", "Sporten", "Uitgaan", "Rust nemen", "Nieuwe relatie zoeken"])
-
-    if st.button("Volgend jaar"):
-        speler["leeftijd"] += 1
-
-        # Actie effecten
-        if actie == "Studeren":
-            speler["slimheid"] += random.randint(1, 5)
-            speler["geluk"] -= random.randint(0, 3)
-        elif actie == "Werken":
-            inkomen = random.randint(500, 2000)
-            speler["geld"] += inkomen
-            speler["geluk"] -= random.randint(0, 5)
-        elif actie == "Sporten":
-            speler["gezondheid"] += random.randint(5, 10)
-            speler["geluk"] += random.randint(1, 3)
-        elif actie == "Uitgaan":
-            speler["geluk"] += random.randint(5, 10)
-            speler["geld"] -= random.randint(50, 200)
-            speler["gezondheid"] -= random.randint(1, 5)
-        elif actie == "Rust nemen":
-            speler["gezondheid"] += random.randint(1, 5)
-            speler["geluk"] += random.randint(1, 5)
-        elif actie == "Nieuwe relatie zoeken":
-            kans = random.randint(1, 3)
-            if kans == 1:
-                naam_relatie = f"Partner{speler['leeftijd']}"
-                speler["relaties"].append(naam_relatie)
-                st.success(f"Gefeliciteerd! Je hebt een nieuwe relatie met {naam_relatie}.")
+    print("\nKies een actie voor dit jaar:")
+    for keuze in keuzes:
+        print(keuze)
+    
+    while True:
+        try:
+            keuze = int(input("Typ het nummer van je keuze (1-12): "))
+            if 1 <= keuze <= 12:
+                break
             else:
-                st.warning("Geen nieuwe relatie dit jaar.")
+                print("Kies een nummer tussen 1 en 12.")
+        except:
+            print("Typ een geldig nummer.")
+    
+    # Effecten van keuzes
+    if keuze == 1:
+        geld += 500
+        geluk -= 5
+    elif keuze == 2:
+        geluk += 5
+        geld += 100  # kleine bijbaan
+    elif keuze == 3:
+        gezondheid += 5
+        geld -= 50
+    elif keuze == 4:
+        geluk += 10
+        gezondheid -= 5
+    elif keuze == 5:
+        geluk += 5
+        geld -= 100
+    elif keuze == 6:
+        geld += 200
+        geluk -= 5
+    elif keuze == 7:
+        winst = random.randint(-200, 1000)
+        geld += winst
+        gezondheid -= random.randint(0, 10)
+    elif keuze == 8:
+        geluk += 10
+        geld -= random.randint(0, 200)
+    elif keuze == 9:
+        gezondheid += 5
+        geld -= 50
+    elif keuze == 10:
+        geluk += 10
+        geld -= 500
+    elif keuze == 11:
+        geluk += 10
+        geld -= 300
+    elif keuze == 12:
+        geluk -= 5
+        gezondheid -= 5
 
-        # Willekeurige gebeurtenissen
-        gebeurtenis = random.randint(1, 10)
-        if gebeurtenis == 1:
-            verlies = random.randint(50, 200)
-            speler["geld"] -= verlies
-            st.warning(f"Oeps! Je hebt ${verlies} verloren aan een ongeluk.")
-        elif gebeurtenis == 2:
-            winst = random.randint(100, 500)
-            speler["geld"] += winst
-            st.success(f"Geluk! Je hebt ${winst} gewonnen.")
-        elif gebeurtenis == 3:
-            ziekte = random.randint(5, 20)
-            speler["gezondheid"] -= ziekte
-            st.error(f"Helaas! Je bent ziek geworden en verliest {ziekte} gezondheid.")
+    return geld, geluk, gezondheid
 
-        # Grenzen voor stats
-        speler["gezondheid"] = min(max(speler["gezondheid"], 0), 100)
-        speler["geluk"] = min(max(speler["geluk"], 0), 100)
-        speler["slimheid"] = min(max(speler["slimheid"], 0), 100)
+# Simulatie loop
+while leeftijd < 80 and gezondheid > 0:
+    leeftijd += 1
+    print(f"\n--- Leeftijd: {leeftijd} jaar ---")
+    geld, geluk, gezondheid = levenskeuze(leeftijd, geld, geluk, gezondheid)
+    print(f"Geld: {geld}, Geluk: {geluk}, Gezondheid: {gezondheid}")
 
-        # Controleer of speler overleden is
-        if speler["gezondheid"] <= 0 or speler["leeftijd"] >= 100:
-            st.session_state.player["leven_actief"] = False
-            st.error(f"{speler['naam']} is overleden op leeftijd {speler['leeftijd']}.")
-        st.experimental_rerun()
+print("\nJe leven is voorbij!")
+print(f"Leeftijd: {leeftijd}, Geld: {geld}, Geluk: {geluk}, Gezondheid: {gezondheid}")
