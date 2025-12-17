@@ -1,125 +1,161 @@
 import streamlit as st
 import time
 
-# ================= STATS =================
-if "money" not in st.session_state:
-    st.session_state.money = 0
-if "money_per_click" not in st.session_state:
-    st.session_state.money_per_click = 1
-if "money_per_second" not in st.session_state:
-    st.session_state.money_per_second = 0
-if "prestige" not in st.session_state:
-    st.session_state.prestige = 0
-if "weapon_level" not in st.session_state:
-    st.session_state.weapon_level = 0
-if "bonus_cooldown" not in st.session_state:
-    st.session_state.bonus_cooldown = 0
-if "achievements" not in st.session_state:
-    st.session_state.achievements = {
-        "100 geld": False,
-        "1000 geld": False,
-        "10 per seconde": False
-    }
+# ================= INIT =================
+def init(key, value):
+    if key not in st.session_state:
+        st.session_state[key] = value
 
-# ================= WAPENS =================
-weapon_names = ["Abel's Punch", "Kartonnen Pistol", "Metaal Pistol", "Final Boss Debie"]
-weapon_click_values = [1, 25, 50, 100000]
-weapon_prices = [0, 100, 500, 500000]
+init("money", 0)
+init("money_per_click", 1)
+init("money_per_second", 0)
+init("prestige", 0)
+init("weapon_level", 0)
+init("bonus_cd", 0)
+init("malteser", False)
+init("total_clicks", 0)
+init("total_upgrades", 0)
+init("start_time", time.time())
 
-# ================= FUNCTIES =================
-def click_weapon():
-    st.session_state.money += st.session_state.money_per_click * (1 + st.session_state.prestige)
+init("achievements", {
+    "100 geld": False,
+    "1.000 geld": False,
+    "100.000 geld": False,
+    "10 per seconde": False,
+    "Malteser gekocht": False,
+    "Prestige gedaan": False
+})
+
+# ================= DATA =================
+weapons = [
+    ("Abel's Punch", 1, 0),
+    ("Kartonnen Pistol", 25, 100),
+    ("Metaal Pistol", 50, 500),
+    ("Final Boss Debie", 100000, 500000)
+]
+
+MALTESER_PRICE = 250_000
+MALTESER_BONUS = 50
+
+# ================= LOGIC =================
+def click():
+    bonus = MALTESER_BONUS if st.session_state.malteser else 0
+    gain = (st.session_state.money_per_click + bonus) * (1 + st.session_state.prestige)
+    st.session_state.money += gain
+    st.session_state.total_clicks += 1
+
+def auto_tick():
+    st.session_state.money += (
+        st.session_state.money_per_second * (1 + st.session_state.prestige) * 0.1
+    )
 
 def buy_click_upgrade():
     if st.session_state.money >= 10:
         st.session_state.money -= 10
         st.session_state.money_per_click += 1
+        st.session_state.total_upgrades += 1
 
 def buy_auto_upgrade():
     if st.session_state.money >= 25:
         st.session_state.money -= 25
         st.session_state.money_per_second += 1
+        st.session_state.total_upgrades += 1
 
 def buy_weapon():
     lvl = st.session_state.weapon_level + 1
-    if lvl < len(weapon_names) and st.session_state.money >= weapon_prices[lvl]:
-        st.session_state.money -= weapon_prices[lvl]
+    if lvl < len(weapons) and st.session_state.money >= weapons[lvl][2]:
+        st.session_state.money -= weapons[lvl][2]
         st.session_state.weapon_level = lvl
-        st.session_state.money_per_click = weapon_click_values[lvl]
+        st.session_state.money_per_click = weapons[lvl][1]
+        st.session_state.total_upgrades += 1
 
-def bonus_money():
-    if st.session_state.bonus_cooldown <= 0:
+def buy_malteser():
+    if not st.session_state.malteser and st.session_state.money >= MALTESER_PRICE:
+        st.session_state.money -= MALTESER_PRICE
+        st.session_state.malteser = True
+        st.session_state.achievements["Malteser gekocht"] = True
+
+def bonus():
+    if st.session_state.bonus_cd <= 0:
         st.session_state.money += 50 * (1 + st.session_state.prestige)
-        st.session_state.bonus_cooldown = 10  # cooldown in sec
+        st.session_state.bonus_cd = 10
 
-def do_prestige():
+def prestige():
     if st.session_state.money >= 1000:
         st.session_state.prestige += 1
         st.session_state.money = 0
         st.session_state.money_per_click = 1
         st.session_state.money_per_second = 0
         st.session_state.weapon_level = 0
+        st.session_state.malteser = False
+        st.session_state.achievements["Prestige gedaan"] = True
 
-def update_achievements():
-    if st.session_state.money >= 100:
+def check_achievements():
+    m = st.session_state.money
+    if m >= 100:
         st.session_state.achievements["100 geld"] = True
-    if st.session_state.money >= 1000:
-        st.session_state.achievements["1000 geld"] = True
+    if m >= 1_000:
+        st.session_state.achievements["1.000 geld"] = True
+    if m >= 100_000:
+        st.session_state.achievements["100.000 geld"] = True
     if st.session_state.money_per_second >= 10:
         st.session_state.achievements["10 per seconde"] = True
 
-# ================= LAYOUT =================
-st.title("📦 Kartonnen Wapen Clicker")
+# ================= UI =================
+st.title("💥 ULTRA Kartonnen Clicker")
 
-# Toon geld en stats
-st.write(f"**Geld:** €{int(st.session_state.money)}")
-st.write(f"**Klik per klik:** €{st.session_state.money_per_click}")
-st.write(f"**Per seconde:** €{st.session_state.money_per_second}")
-st.write(f"**Prestige multiplier:** x{1 + st.session_state.prestige}")
-st.write(f"**Huidig wapen:** {weapon_names[st.session_state.weapon_level]}")
+st.write(f"💰 **Geld:** €{int(st.session_state.money)}")
+st.write(f"👊 **Per klik:** €{st.session_state.money_per_click} + {MALTESER_BONUS if st.session_state.malteser else 0}")
+st.write(f"⏱️ **Per seconde:** €{st.session_state.money_per_second}")
+st.write(f"⭐ **Prestige:** x{1 + st.session_state.prestige}")
+st.write(f"🔫 **Wapen:** {weapons[st.session_state.weapon_level][0]}")
+st.write(f"🐶 **Malteser:** {'Ja' if st.session_state.malteser else 'Nee'}")
 
-# Klik weapon
-if st.button("Klik op Wapen!"):
-    click_weapon()
+st.divider()
 
-# Shop upgrades
-st.subheader("Shop")
-cols = st.columns(2)
+if st.button("🔘 KLIK OP WAPEN"):
+    click()
 
-with cols[0]:
-    if st.button("Klik upgrade (+1 per klik, €10)"):
-        buy_click_upgrade()
-with cols[1]:
-    if st.button("Auto geld (+1/sec, €25)"):
-        buy_auto_upgrade()
+st.divider()
+st.subheader("🛒 Shop")
 
-# Weapon upgrade
+c1, c2 = st.columns(2)
+with c1:
+    st.button("Upgrade klik (+1 | €10)", on_click=buy_click_upgrade)
+with c2:
+    st.button("Auto geld (+1/sec | €25)", on_click=buy_auto_upgrade)
+
 lvl = st.session_state.weapon_level + 1
-if lvl < len(weapon_names):
-    if st.button(f"Koop {weapon_names[lvl]} (€{weapon_prices[lvl]}, {weapon_click_values[lvl]} per klik)"):
-        buy_weapon()
+if lvl < len(weapons):
+    st.button(
+        f"Koop {weapons[lvl][0]} (€{weapons[lvl][2]})",
+        on_click=buy_weapon
+    )
 
-# Bonus
-if st.button("Bonus geld (+50, 10s cooldown)"):
-    bonus_money()
+if not st.session_state.malteser:
+    st.button("🐶 Koop Malteser (+50 per klik | €250.000)", on_click=buy_malteser)
 
-# Prestige
-if st.button("Prestige (reset vanaf €1000)"):
-    do_prestige()
+st.divider()
+st.button("🎁 Bonus (+50)", on_click=bonus)
+st.button("🔁 Prestige (vanaf €1000)", on_click=prestige)
 
-# Achievements
-st.subheader("Achievements")
-for name, done in st.session_state.achievements.items():
-    st.write(f"{'✔' if done else '✖'} {name}")
+st.divider()
+st.subheader("📊 Statistieken")
+st.write(f"Totale kliks: {st.session_state.total_clicks}")
+st.write(f"Totale upgrades: {st.session_state.total_upgrades}")
+st.write(f"Tijd gespeeld: {int(time.time() - st.session_state.start_time)} sec")
 
-# ================= AUTO-GELD =================
-# update geld automatisch elke 0.1 sec
-def auto_increment():
-    st.session_state.money += st.session_state.money_per_second * (1 + st.session_state.prestige) * 0.1
-    if st.session_state.bonus_cooldown > 0:
-        st.session_state.bonus_cooldown -= 0.1
-    update_achievements()
+st.divider()
+st.subheader("🏆 Achievements")
+for a, v in st.session_state.achievements.items():
+    st.write(("✔" if v else "✖") + " " + a)
 
-auto_increment()
+# ================= LOOP =================
+auto_tick()
+if st.session_state.bonus_cd > 0:
+    st.session_state.bonus_cd -= 0.1
+
+check_achievements()
+
 time.sleep(0.1)
 st.experimental_rerun()
